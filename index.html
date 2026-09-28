@@ -152,6 +152,45 @@ svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stro
 .seg button.wide{grid-column:span 2}
 .seg button.full{grid-column:1/-1}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:90%}
+/* Чина */
+svg.china{display:block;overflow:visible}
+svg.china .ch-body{transform-origin:383px 1250px;animation:ch-breathe 3.4s ease-in-out infinite}
+svg.china .ch-bob{animation:ch-bob 3.4s ease-in-out infinite}
+svg.china .ch-sway{transform-origin:380px 600px;animation:ch-sway 9s ease-in-out infinite}
+svg.china .ch-tilt{transform-origin:380px 600px;transition:transform .5s cubic-bezier(.3,1.5,.5,1)}
+svg.china.m-think .ch-tilt{transform:rotate(-4deg)}
+svg.china.m-joy .ch-tilt{transform:rotate(1deg)}
+svg.china .ch-lid{transform-box:fill-box;transform-origin:50% 0;transform:scaleY(0);animation:ch-blink 5.2s infinite}
+svg.china .ch-lash{opacity:0}
+svg.china.m-sleepy .ch-lid,svg.china.m-joy .ch-lid{transform:none;animation:none}
+svg.china.m-sleepy .ch-lash,svg.china.m-joy .ch-lash{opacity:.85}
+svg.china.m-sleepy .ch-body,svg.china.m-sleepy .ch-bob{animation-duration:5.5s}
+svg.china.m-sleepy .ch-sway{animation:none}
+svg.china .ch-z{font-family:"Noto Serif SC",serif;fill:var(--muted);animation:ch-z 3s ease-in-out infinite}
+svg.china.pet{animation:ch-hop .6s ease}
+svg.china.pet .ch-tilt{transform:rotate(-5deg)}
+@keyframes ch-breathe{50%{transform:scale(1.006,1.014)}}
+@keyframes ch-bob{50%{transform:translateY(-7px)}}
+@keyframes ch-sway{0%,100%{transform:rotate(0)}22%,30%{transform:rotate(-1.3deg)}58%,70%{transform:rotate(1.1deg)}}
+@keyframes ch-blink{0%,93%,100%{transform:scaleY(0)}95.5%{transform:scaleY(1)}}
+@keyframes ch-z{0%{opacity:0;transform:translateY(20px)}40%{opacity:1}100%{opacity:0;transform:translateY(-40px)}}
+@keyframes ch-hop{30%{transform:translateY(-8px)}60%{transform:translateY(0)}78%{transform:translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){svg.china *{animation:none!important}}
+
+.buddy{display:flex;align-items:flex-end;gap:10px;margin-top:14px}
+.buddy-dog{width:100px;flex:none;margin-bottom:-6px}
+.buddy-dog svg{width:100px;height:160px}
+.bubble{position:relative;flex:1;background:var(--sheet);border:1px solid var(--rule);border-radius:16px 16px 16px 4px;padding:11px 14px;margin-bottom:26px}
+.bubble:before{content:"";position:absolute;left:-7px;bottom:10px;width:12px;height:12px;background:var(--sheet);border-left:1px solid var(--rule);border-bottom:1px solid var(--rule);transform:rotate(45deg)}
+.bubble .zh{font-size:18px;font-weight:700}
+.bubble .ru{font-size:14px;font-weight:400;color:var(--ink2);margin-top:2px;line-height:1.35}
+.bubble.pop{animation:pop .3s cubic-bezier(.3,1.6,.5,1)}
+@keyframes pop{from{transform:scale(.94);opacity:.4}}
+.buddy.result{margin-top:10px}.buddy.result>svg{width:74px;height:118px;flex:none}.buddy.result .bubble{margin-bottom:20px}
+.ava{width:28px;height:28px;border-radius:50%;overflow:hidden;flex:none;background:#b06a3a;position:relative;margin:-3px}
+.ava svg{position:absolute;width:90px;height:144px;left:-32px;top:-34px}
+.sheet-dog{width:84px;margin:-6px auto 4px}.sheet-dog svg{width:84px;height:134px}
+.rest-dog{width:100px;margin:0 auto 6px}.rest-dog svg{width:100px;height:160px}
 .center{text-align:center}
 .backlink{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:14px;margin-bottom:10px}
 </style>
