@@ -82,7 +82,7 @@ svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stro
 .label{font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:var(--muted);font-weight:600;margin:26px 2px 10px}
 .line{height:4px;border-radius:2px;background:var(--rule);overflow:hidden}
 .line i{display:block;height:100%;background:var(--ink)}
-.level-row{display:grid;grid-template-columns:54px 1fr 84px;align-items:center;gap:12px;padding:10px 0}
+.level-row{display:grid;grid-template-columns:58px 1fr 92px;align-items:center;gap:12px;padding:10px 0}
 .level-row + .level-row{border-top:1px solid var(--rule)}
 .level-row b{font-size:14px}
 .level-row .n{text-align:right;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -158,17 +158,11 @@ svg.china .ch-body{transform-origin:383px 1250px;animation:ch-breathe 3.4s ease-
 svg.china .ch-bob{animation:ch-bob 3.4s ease-in-out infinite}
 svg.china .ch-sway{transform-origin:380px 600px;animation:ch-sway 9s ease-in-out infinite}
 svg.china .ch-tilt{transform-origin:380px 600px;transition:transform .5s cubic-bezier(.3,1.5,.5,1)}
-svg.china.m-think .ch-tilt{transform:rotate(-4deg)}
-svg.china.m-joy .ch-tilt{transform:rotate(1deg)}
 svg.china .ch-lid{transform-box:fill-box;transform-origin:50% 0;transform:scaleY(0);animation:ch-blink 5.2s infinite}
-svg.china .ch-lash{opacity:0}
-svg.china.m-sleepy .ch-lid,svg.china.m-joy .ch-lid{transform:none;animation:none}
-svg.china.m-sleepy .ch-lash,svg.china.m-joy .ch-lash{opacity:.85}
-svg.china.m-sleepy .ch-body,svg.china.m-sleepy .ch-bob{animation-duration:5.5s}
-svg.china.m-sleepy .ch-sway{animation:none}
-svg.china .ch-z{font-family:"Noto Serif SC",serif;fill:var(--muted);animation:ch-z 3s ease-in-out infinite}
+svg.china.slow .ch-body,svg.china.slow .ch-bob{animation-duration:5.5s}
+svg.china.slow .ch-sway{animation:none}
 svg.china.pet{animation:ch-hop .6s ease}
-svg.china.pet .ch-tilt{transform:rotate(-5deg)}
+svg.china.pet .ch-tilt{transform:rotate(-6deg)!important}
 @keyframes ch-breathe{50%{transform:scale(1.006,1.014)}}
 @keyframes ch-bob{50%{transform:translateY(-7px)}}
 @keyframes ch-sway{0%,100%{transform:rotate(0)}22%,30%{transform:rotate(-1.3deg)}58%,70%{transform:rotate(1.1deg)}}
