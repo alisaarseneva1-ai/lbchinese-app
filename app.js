@@ -162,6 +162,13 @@
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text); u.voice = zhVoice; u.lang = zhVoice.lang; u.rate = .8; speechSynthesis.speak(u);
   }
+  // аудирование: реплики по очереди, мужской голос ниже, женский выше
+  function speakLines(lines) {
+    if (!zhVoice) return;
+    speechSynthesis.cancel();
+    lines.forEach(([who, t]) => { const u = new SpeechSynthesisUtterance(t); u.voice = zhVoice; u.lang = zhVoice.lang; u.rate = .9; u.pitch = who === "男" ? .75 : who === "女" ? 1.2 : 1; speechSynthesis.speak(u); });
+  }
+  const canAudio = () => !!zhVoice;
 
   // ---------- навигация ----------
   let depth = 0;
@@ -177,10 +184,11 @@
   async function load() {
     const raw = await (await fetch("program.json", { cache: "no-cache" })).json();
     const words = new Map(); byLevel = {};
-    raw.words.forEach(w => { const o = { h: w[0], p: w[1], m: w[2], lv: w[3], day: w[4], hint: w[5], ex: w[6], ext: w[7] }; words.set(o.h, o); (byLevel[o.lv] = byLevel[o.lv] || []).push(o); });
+    raw.words.forEach(w => { const o = { h: w[0], p: w[1], m: w[2], lv: w[3], day: w[4], hint: w[5], ex: w[6], ext: w[7], seg: w[8] || "", exp: w[9] || "" }; words.set(o.h, o); (byLevel[o.lv] = byLevel[o.lv] || []).push(o); });
     const lessons = {};
-    Object.entries(raw.lessons).forEach(([lv, rows]) => rows.forEach(r => { lessons[lv + ":" + r[0]] = { lv: +lv, day: r[0], week: r[1], kind: r[2], topic: r[3], sounds: r[4], grammar: r[5] }; }));
-    P = { words, lessons, sizes: raw.sizes };
+    Object.entries(raw.lessons).forEach(([lv, rows]) => rows.forEach(r => { lessons[lv + ":" + r[0]] = { lv: +lv, day: r[0], week: r[1], kind: r[2], topic: r[3], sounds: r[4], grammar: r[5], gex: r[6] || [], gq: r[7] || [] }; }));
+    const listening = (raw.listening || []).map(x => ({ lv: x[0], part: x[1], lines: x[2], q: x[3], opts: x[4], py: x[5], ans: x[6], ru: x[7] }));
+    P = { words, lessons, sizes: raw.sizes, listening };
   }
   const lesson = (lv, d) => P.lessons[lv + ":" + d];
   const lessonWords = (lv, d) => (byLevel[lv] || []).filter(w => w.day === d);
@@ -188,12 +196,53 @@
   const known = lv => (S.k && S.k[lv]) || 0;
   const size = lv => (P.sizes && P.sizes[lv]) || 1;
 
-  function makeQuestion(w, dir) {
-    const pool = shuffle((byLevel[w.lv] || []).filter(x => x.h !== w.h)).slice(0, 30);
-    const right = dir === 0 ? w.m : w.h, opts = [right];
-    for (const x of pool) { const v = dir === 0 ? x.m : x.h; if (!opts.includes(v)) opts.push(v); if (opts.length === 4) break; }
-    shuffle(opts);
-    return { w, dir, opts, correct: opts.indexOf(right) };
+  // ---------- упражнения ----------
+  const PUNCT = new Set("，。？！、；：“”‘’（）…—,.?!;:".split(""));
+  const TONES = { a: "āáǎà", e: "ēéěè", i: "īíǐì", o: "ōóǒò", u: "ūúǔù", "ü": "ǖǘǚǜ" };
+  const MARK = {}; Object.entries(TONES).forEach(([b, cs]) => [...cs].forEach((c, i) => MARK[c] = [b, i]));
+  function toneVariants(py) {
+    const idx = [...py].map((c, i) => MARK[c] ? i : -1).filter(i => i >= 0), out = new Set();
+    for (let t = 0; t < 40 && out.size < 3 && idx.length; t++) {
+      const ch = [...py]; shuffle(idx.slice()).slice(0, 1 + (Math.random() < .5 ? 1 : 0)).forEach(i => { const [b, k] = MARK[ch[i]]; const opts = [0, 1, 2, 3].filter(x => x !== k); ch[i] = TONES[b][opts[Math.floor(Math.random() * 3)]]; });
+      const v = ch.join(""); if (v !== py) out.add(v);
+    }
+    return [...out];
+  }
+  function opts(right, pool, n = 4) { const o = [right]; for (const x of pool) { if (x && !o.includes(x)) o.push(x); if (o.length === n) break; } shuffle(o); return { opts: o, correct: o.indexOf(right) }; }
+  const same = w => shuffle((byLevel[w.lv] || []).filter(x => x.h !== w.h)).slice(0, 30);
+  const EX = {
+    meaning: w => ({ kind: "meaning", eyebrow: "Что значит", zh: w.h, py: w.p, ...opts(w.m, same(w).map(x => x.m)), w }),
+    reverse: w => ({ kind: "reverse", eyebrow: "Как сказать по-китайски", ru: w.m, zhOpts: 1, ...opts(w.h, same(w).filter(x => x.h.length === w.h.length).map(x => x.h).concat(same(w).map(x => x.h))), w }),
+    pinyin: w => { const py = w.p.split("/")[0].trim(); let wr = toneVariants(py); if (wr.length < 3) wr = wr.concat(same(w).map(x => x.p.split("/")[0])); return { kind: "pinyin", eyebrow: "Как читается? Следите за тонами", zh: w.h, ...opts(py, wr), w }; },
+    listen: w => canAudio() ? { kind: "listen", eyebrow: "Послушайте и выберите слово", say: w.h, zhOpts: 1, ...opts(w.h, same(w).filter(x => x.h.length === w.h.length).map(x => x.h).concat(same(w).map(x => x.h))), w } : null,
+    gap: (w, ws = []) => { const ex = w.ex || w.seg.replace(/ /g, ""); if (!ex || !ex.includes(w.h)) return null;
+      return { kind: "gap", eyebrow: "Вставьте слово", zh: ex.replace(w.h, "＿＿"), ru: w.ext, zhOpts: 1, ...opts(w.h, ws.filter(x => x.h !== w.h && !ex.includes(x.h)).map(x => x.h).concat(same(w).filter(x => !ex.includes(x.h)).map(x => x.h))), w, explain: `${ex} — ${w.ext}` }; },
+    translate: (w, ws) => { if (!w.ex || !w.ext) return null; const pool = ws.filter(x => x.h !== w.h && x.ex).map(x => x.ex); if (pool.length < 2) return null;
+      return { kind: "translate", eyebrow: "Как сказать по-китайски", ru: w.ext, zhOpts: 1, ...opts(w.ex, pool), w }; },
+    build: w => { const t = (w.seg || "").split(" ").filter(x => x && !PUNCT.has(x)); if (t.length < 3 || t.length > 8) return null;
+      let sh = t.slice(); for (let k = 0; k < 5 && sh.join() === t.join(); k++) shuffle(sh);
+      return { kind: "build", eyebrow: "Соберите фразу", ru: w.ext, tokens: sh, answer: t, w, explain: `${w.ex} — ${w.exp}` }; },
+    grammar: (rule, sent, o, k) => { const right = o[k], oo = shuffle(o.slice()); return { kind: "grammar", eyebrow: "Правило: " + rule, zh: sent, zhOpts: 1, opts: oo, correct: oo.indexOf(right), explain: sent.replace("＿＿", right) }; },
+    audio: a => canAudio() ? { kind: "audio", eyebrow: "Аудирование · " + a.part, lines: a.lines, ru: a.q, zhOpts: 1, opts: a.py && a.py.length === a.opts.length ? a.opts.map((o, i) => o + " " + a.py[i]) : a.opts.slice(), correct: a.ans,
+      explain: a.lines.map(([s, t]) => (s ? s + "：" : "") + t).join("\n") + "\n\n" + a.ru } : null,
+  };
+  const gramOfWeek = (lv, wk) => Object.values(P.lessons).filter(l => l.lv === lv && l.week === wk).flatMap(l => l.gq.map(q => [l.topic, ...q]));
+  const gramOfLevel = lv => Object.values(P.lessons).filter(l => l.lv === lv).flatMap(l => l.gq.map(q => [l.topic, ...q]));
+  function lessonSet(l, ws) {
+    const out = [], extra = ["pinyin", "listen", "gap"];
+    ws.forEach((w, i) => { out.push(i % 2 ? EX.reverse(w) : EX.meaning(w)); const k = extra[i % 3]; out.push((k === "gap" ? EX.gap(w, ws) : EX[k](w)) || EX.pinyin(w)); });
+    const sh = shuffle(ws.slice());
+    sh.slice(0, 2).forEach(w => { const x = EX.translate(w, ws); if (x) out.push(x); });
+    sh.slice(2, 6).map(EX.build).filter(Boolean).slice(0, 2).forEach(x => out.push(x));
+    shuffle(out);
+    return l.gq.map(q => EX.grammar(l.topic, ...q)).concat(out);
+  }
+  function testSet(ws, gram, aud, nw = 10, ng = 3, na = 2) {
+    const mk = [EX.meaning, EX.reverse, EX.pinyin, w => EX.gap(w, ws)], out = [];
+    shuffle(ws).slice(0, nw).forEach((w, i) => out.push(mk[i % 4](w) || EX.meaning(w)));
+    shuffle(gram.slice()).slice(0, ng).forEach(g => out.push(EX.grammar(...g)));
+    shuffle(aud.slice()).slice(0, na).map(EX.audio).filter(Boolean).forEach(x => out.push(x));
+    return shuffle(out);
   }
 
   // ---------- главная ----------
@@ -264,7 +313,8 @@
       </div>
 
       <div class="list">
-        <button class="item" id="lvl">${icon("target")}<div class="grow"><div class="t">Проверить уровень</div><div class="s">Тест от HSK 1 до HSK 7–9, 5–10 минут</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="lvl">${icon("target")}<div class="grow"><div class="t">Тест на уровень</div><div class="s">Слова, грамматика и аудирование, 10–20 минут</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Выбрать уровень самому</div><div class="s">Сейчас ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
         ${S.ok ? `<div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">${S.a ? "до " + fmtDate(S.a) : "активен"}</div></div></div>` : ""}
       </div>
       ${S.demo ? `<div class="foot">Демо-режим · откройте приложение кнопкой в боте</div>` : ""}
@@ -286,6 +336,20 @@
     on("dict", () => go(dictionary));
     on("lvl", () => ask("Пройти тест на уровень в чате с ботом?", () => send({ t: "level" })));
     on("pay", () => send({ t: "pay" }));
+    on("lvset", levelSheet);
+  }
+
+  // ---------- выбор уровня ----------
+  function levelSheet() {
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    const INFO = { 1: "300 слов, простые фразы", 2: "500 слов, бытовые диалоги", 3: "1000 слов, 把 и 被", 4: "2000 слов, связные тексты",
+      5: "3600 слов, новости и статьи", 6: "5400 слов, публицистика", 7: "11 000 слов, академический язык" };
+    bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">Выбрать уровень</h2>
+      <p class="muted small" style="margin-top:4px">Урок начнётся с первой недели уровня. Выученные слова и повторения сохранятся.</p>
+      <div class="list" style="margin-top:14px">${LEVELS.map(lv => `<button class="item" data-lv="${lv}"><b style="width:78px;white-space:nowrap">${hsk(lv)}</b><div class="grow s">${INFO[lv]}</div>${lv === S.l ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div></div>`;
+    bg.querySelectorAll("[data-lv]").forEach(b => b.onclick = e => { e.stopPropagation(); const lv = +b.dataset.lv; haptic();
+      ask(`Начать ${hsk(lv)} с первой недели?`, () => send({ t: "setlevel", l: lv })); });
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
   }
 
   // ---------- разговор с Чиной ----------
@@ -313,18 +377,20 @@
   function startLesson(lv, d) {
     const l = lesson(lv, d);
     if (l.kind === "выходной") return restDay(l);
-    const steps = []; let queue;
+    const steps = [];
+    let ex;
     if (l.kind === "тест") {
-      queue = shuffle(weekWords(lv, l.week)).slice(0, 10);
+      const final = l.topic.startsWith("Пробный экзамен");
+      ex = final ? testSet((byLevel[lv] || []).slice(), gramOfLevel(lv), P.listening.filter(a => a.lv === lv), 14, 6, 5)
+                 : testSet(weekWords(lv, l.week), gramOfWeek(lv, l.week), P.listening.filter(a => a.lv === lv));
     } else {
       const ws = lessonWords(lv, d);
-      if (l.sounds) steps.push({ type: "note", eyebrow: "Перед началом", title: "Звуки и письмо", text: l.sounds });
-      ws.forEach(w => steps.push({ type: "word", w }));
-      if (l.grammar) steps.push({ type: "note", eyebrow: "Грамматика", title: l.topic, text: l.grammar, zh: true });
-      queue = shuffle(ws.slice());
+      if (l.grammar) steps.push({ type: "rule", l });
+      ws.forEach((w, i) => steps.push({ type: "word", w, n: i + 1, of: ws.length }));
+      ex = lessonSet(l, ws);
     }
-    queue.forEach(w => steps.push({ type: "q", q: makeQuestion(w, Math.random() < .5 ? 0 : 1) }));
-    run(steps, (sc, tot, m) => ({ t: "lesson", l: lv, d, sc, tot, m: m.slice(0, 40) }), l.kind === "тест" ? "Тест недели" : "Урок");
+    ex.forEach(q => steps.push({ type: "q", q }));
+    run(steps, (sc, tot, m) => ({ t: "lesson", l: lv, d, sc, tot, m: m.slice(0, 40) }), l.kind === "тест" ? "Тест" : "Урок");
   }
   function restDay(l) {
     $app.innerHTML = `<div class="paper" style="margin-top:8vh"><div class="rest-dog">${chinaSVG("sleepy")}</div><div class="zh" style="font-size:22px;font-weight:700">今天休息</div><div class="py">jīntiān xiūxi</div>
@@ -333,8 +399,9 @@
     document.getElementById("ok").onclick = () => send({ t: "lesson", l: l.lv, d: l.day, sc: 0, tot: 0, m: [] });
   }
   function startReview() {
+    const mk = [EX.meaning, EX.reverse, EX.pinyin, w => EX.gap(w)];
     const ws = shuffle((S.due || []).map(word).filter(Boolean));
-    run(ws.map(w => ({ type: "q", q: makeQuestion(w, Math.random() < .5 ? 0 : 1) })), (sc, tot, m, r) => ({ t: "review", r }), "Повторение");
+    run(ws.map(w => ({ type: "q", q: mk[Math.floor(Math.random() * 4)](w) || EX.meaning(w) })), (sc, tot, m, r) => ({ t: "review", r }), "Повторение");
   }
 
   function run(steps, payload, label) {
@@ -343,40 +410,69 @@
     const draw = () => {
       const s = steps[i]; if (!s) return finish();
       const head = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round(i / steps.length * 100)}%"></i></div><span class="step-count">${i + 1}/${steps.length}</span></div>`;
-      if (s.type === "word") {
+      const nextLabel = () => steps[i + 1] && steps[i + 1].type === "q" && s.type !== "q" ? "К упражнениям" : "Дальше";
+      if (s.type === "rule") {
+        const l = s.l;
+        $app.innerHTML = head + `<div class="paper" style="text-align:left"><div class="eyebrow">Правило дня</div>
+          <h2 style="margin:6px 0 12px;font-size:22px" class="zh">${esc(l.topic)}</h2><div class="grammar-text">${esc(l.grammar)}</div>
+          ${l.gex.map(([zh, py, ru]) => `<div class="gex"><button class="sound-mini" data-say="${esc(zh)}">${icon("sound")}</button><div><div class="zh">${esc(zh)}</div><div class="py-s">${esc(py)}</div><div class="small muted">${esc(ru)}</div></div></div>`).join("")}</div>
+          <div class="actions"><button class="primary" id="next">К новым словам</button></div>`;
+        $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => speak(b.dataset.say));
+      } else if (s.type === "word") {
         const w = s.w;
-        $app.innerHTML = head + `<div class="paper"><div class="eyebrow">Новое слово</div>
+        $app.innerHTML = head + `<div class="paper"><div class="eyebrow">Новое слово · ${s.n} из ${s.of}</div>
           <div class="big zh">${esc(w.h)}</div><div class="py">${esc(w.p)}</div><div class="ru">${esc(w.m)}</div>
           <button class="sound" id="say">${icon("sound")}Послушать</button>
-          ${w.hint || w.ex ? `<div class="note">${w.hint ? esc(w.hint) : ""}${w.ex ? `<div style="margin-top:${w.hint ? 10 : 0}px"><span class="zh">${esc(w.ex)}</span><br><span class="small muted">${esc(w.ext)}</span></div>` : ""}</div>` : ""}
-          </div><div class="actions"><button class="primary" id="next">Дальше</button></div>`;
+          ${w.hint || w.ex ? `<div class="note">${w.hint ? `<div>${esc(w.hint)}</div>` : ""}${w.ex ? `<div class="gex" style="margin-top:${w.hint ? 10 : 0}px"><button class="sound-mini" data-say="${esc(w.ex)}">${icon("sound")}</button><div><div class="zh">${esc(w.ex)}</div>${w.exp ? `<div class="py-s">${esc(w.exp)}</div>` : ""}<div class="small muted">${esc(w.ext)}</div></div></div>` : ""}</div>` : ""}
+          </div><div class="actions"><button class="primary" id="next">${nextLabel()}</button></div>`;
         document.getElementById("say").onclick = () => speak(w.h);
-      } else if (s.type === "note") {
-        $app.innerHTML = head + `<div class="paper" style="text-align:left"><div class="eyebrow">${esc(s.eyebrow)}</div>
-          <h2 style="margin:6px 0 14px;font-size:22px" class="${s.zh ? "zh" : ""}">${esc(s.title)}</h2><div class="grammar-text">${esc(s.text)}</div></div>
-          <div class="actions"><button class="primary" id="next">${steps[i + 1] && steps[i + 1].type === "q" ? "К упражнениям" : "Дальше"}</button></div>`;
+        $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => speak(b.dataset.say));
       } else {
-        const q = s.q, w = q.w;
-        $app.innerHTML = head + `<div class="paper">${q.dir === 0
-            ? `<div class="q">Что значит</div><div class="q-hz zh">${esc(w.h)}</div><div class="py">${esc(w.p)}</div>`
-            : `<div class="q">Как сказать по-китайски</div><div class="q-ru">${esc(w.m)}</div>`}</div>
-          <div class="opts">${q.opts.map((o, k) => `<button class="opt ${q.dir ? "zh" : ""}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><span>${esc(o)}</span></button>`).join("")}</div>
-          <button class="skip" id="skip">Не знаю</button><div id="fb"></div>`;
-        const answer = k => {
-          const ok = k === q.correct;
-          $app.querySelectorAll(".opt").forEach(x => { x.onclick = null; const kk = +x.dataset.k; x.classList.add(kk === q.correct ? "ok" : kk === k ? "bad" : "dim"); });
-          document.getElementById("skip").remove();
+        const q = s.q;
+        const card = `<div class="paper"><div class="q">${esc(q.eyebrow)}</div>
+          ${q.zh ? `<div class="${q.zh.length > 6 ? "q-sent" : "q-hz"} zh">${esc(q.zh)}</div>` : ""}
+          ${q.py ? `<div class="py">${esc(q.py)}</div>` : ""}
+          ${q.ru ? `<div class="${q.zh ? "small muted" : "q-ru"}" style="margin-top:8px">${esc(q.ru)}</div>` : ""}
+          ${q.say || q.lines ? `<button class="sound" id="play">${icon("sound")}Послушать${q.lines ? " ещё раз" : ""}</button>` : ""}</div>`;
+        const done = (ok, rightHtml) => {
           haptic(ok ? "success" : "error");
-          if (ok) score++; else mistakes.push(w.h);
-          results.push([w.h, ok ? 1 : 0]);
-          document.getElementById("fb").innerHTML = `<div class="fb ${ok ? "ok" : "bad"}">${ok ? "Верно" : "Правильно"}: <span class="zh">${esc(w.h)}</span> · ${esc(w.p)} · ${esc(w.m)}</div>
+          if (ok) score++; else if (q.w) mistakes.push(q.w.h);
+          if (q.w) results.push([q.w.h, ok ? 1 : 0]);
+          const wline = q.w ? ` <span class="zh">${esc(q.w.h)}</span> · ${esc(q.w.p)} · ${esc(q.w.m)}` : "";
+          document.getElementById("fb").innerHTML = `<div class="fb ${ok ? "ok" : "bad"}">${ok ? "Верно" : "Правильно: " + rightHtml}${wline ? (ok ? ":" : " ·") + wline : ""}</div>
+            ${q.explain && (!ok || q.kind === "audio" || q.kind === "grammar") ? `<div class="explain">${esc(q.explain).replace(/\n/g, "<br>")}</div>` : ""}
             <div class="actions"><button class="primary" id="next">Дальше</button></div>`;
+          const sk = document.getElementById("skip"); if (sk) sk.remove();
           document.getElementById("next").onclick = () => { i++; draw(); };
         };
-        $app.querySelectorAll(".opt").forEach(b => b.onclick = () => answer(+b.dataset.k));
-        document.getElementById("skip").onclick = () => answer(-1);
+        if (q.kind === "build") {
+          const chosen = [];
+          $app.innerHTML = head + card + `<div class="build-line zh" id="line">…</div><div class="chips">${q.tokens.map((t, k) => `<button class="chip zh" data-k="${k}">${esc(t)}</button>`).join("")}</div>
+            <div class="row" style="margin-top:12px;gap:8px"><button class="secondary" id="reset" style="flex:1">Сбросить</button><button class="primary" id="check" style="flex:2" disabled>Проверить</button></div>
+            <button class="skip" id="skip">Не знаю</button><div id="fb"></div>`;
+          const line = document.getElementById("line"), check = document.getElementById("check");
+          const upd = () => { line.textContent = chosen.map(k => q.tokens[k]).join(" ") || "…"; check.disabled = chosen.length !== q.tokens.length;
+            $app.querySelectorAll(".chip").forEach(c => c.classList.toggle("used", chosen.includes(+c.dataset.k))); };
+          $app.querySelectorAll(".chip").forEach(c => c.onclick = () => { const k = +c.dataset.k; if (!chosen.includes(k)) { chosen.push(k); haptic(); upd(); } });
+          document.getElementById("reset").onclick = () => { chosen.length = 0; upd(); };
+          const finishBuild = ok => { $app.querySelectorAll(".chip,#reset,#check").forEach(b => b.disabled = true); done(ok, `<span class="zh">${esc(q.answer.join(""))}</span>`); };
+          check.onclick = () => finishBuild(chosen.map(k => q.tokens[k]).join("") === q.answer.join(""));
+          document.getElementById("skip").onclick = () => finishBuild(false);
+        } else {
+          $app.innerHTML = head + card + `<div class="opts">${q.opts.map((o, k) => `<button class="opt ${q.zhOpts ? "zh" : ""}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><span>${esc(o)}</span></button>`).join("")}</div>
+            <button class="skip" id="skip">Не знаю</button><div id="fb"></div>`;
+          const answer = k => {
+            $app.querySelectorAll(".opt").forEach(x => { x.onclick = null; const kk = +x.dataset.k; x.classList.add(kk === q.correct ? "ok" : kk === k ? "bad" : "dim"); });
+            done(k === q.correct, `<span class="${q.zhOpts ? "zh" : ""}">${esc(q.opts[q.correct])}</span>`);
+          };
+          $app.querySelectorAll(".opt").forEach(b => b.onclick = () => answer(+b.dataset.k));
+          document.getElementById("skip").onclick = () => answer(-1);
+        }
+        const pl = document.getElementById("play");
+        const playIt = () => q.lines ? speakLines(q.lines) : speak(q.say);
+        if (pl) { pl.onclick = playIt; setTimeout(playIt, 250); }
       }
-      const nx = document.getElementById("next"); if (nx) nx.onclick = () => { haptic(); i++; draw(); };
+      const nx = document.getElementById("next"); if (nx && s.type !== "q") nx.onclick = () => { haptic(); i++; draw(); };
       document.getElementById("x").onclick = () => ask("Выйти? Результат этого урока не сохранится.", toHome);
     };
     const finish = () => {
@@ -385,14 +481,14 @@
       $app.innerHTML = `<div class="paper" style="margin-top:9vh"><div class="stamp">${ch}</div>
         <div class="eyebrow">${esc(label)} завершён</div><h2 style="margin-top:6px">${word_}</h2>
         ${total ? `<div class="score"><b>${score} из ${total}</b>верных ответов</div>` : ""}
-        ${mistakes.length ? `<div class="note">Вернутся в повторении: <span class="zh">${mistakes.map(esc).join("、")}</span></div>` : ""}</div>
+        ${mistakes.length ? `<div class="note">Вернутся в повторении: <span class="zh">${[...new Set(mistakes)].map(esc).join("、")}</span></div>` : ""}</div>
         <div class="buddy result">${chinaSVG(pct >= .9 ? "joy" : pct >= .6 ? "happy" : "think")}<div class="bubble">${pct >= .9
           ? `<div class="zh">太棒了！</div><div class="ru">Вот это да! Где моя вкусняшка?</div>`
           : pct >= .6 ? `<div class="zh">不错！</div><div class="ru">Хорошо! Ошибки повторим завтра.</div>`
           : `<div class="zh">没关系！</div><div class="ru">Ничего страшного — я помогу потренироваться.</div>`}</div></div>
         <div class="actions"><button class="primary" id="save">Сохранить результат</button></div>`;
       haptic("success");
-      document.getElementById("save").onclick = () => send(payload(score, total, mistakes, results.slice(0, 60)));
+      document.getElementById("save").onclick = () => send(payload(score, total, [...new Set(mistakes)], results.slice(0, 60)));
     };
     draw();
   }
