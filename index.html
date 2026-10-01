@@ -199,6 +199,45 @@ svg.china.pet .ch-tilt{transform:rotate(-6deg)!important}
 .primary:disabled{opacity:.4}
 .center{text-align:center}
 .backlink{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:14px;margin-bottom:10px}
+
+/* подготовка к экзаменам */
+.prep{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.prep-card{background:var(--sheet);border:1px solid var(--rule);border-radius:18px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:132px}
+.prep-card .zh{width:40px;height:40px;border-radius:9px;background:var(--seal);color:#fff;display:grid;place-items:center;font-size:22px;font-weight:700;margin-bottom:6px;transform:rotate(-3deg)}
+.prep-card + .prep-card .zh{background:var(--jade)}
+.prep-card b{font-size:15px;line-height:1.25}
+.prep-card small{font-size:12.5px;color:var(--muted);line-height:1.35}
+.sec-zh{width:34px;height:34px;border-radius:8px;border:1px solid var(--rule);display:grid;place-items:center;font-size:15px;font-weight:700;flex:none;color:var(--seal)}
+.sec-big{font-size:54px;font-weight:700;color:var(--seal);margin-bottom:8px}
+.clock{font-variant-numeric:tabular-nums;font-size:14px;font-weight:700;padding:4px 8px;border-radius:8px;background:var(--paper2)}
+.clock.warn{background:var(--seal);color:#fff}
+.dict-t{font-size:13px;font-weight:600;padding:5px 9px;border-radius:8px;border:1px solid var(--rule);color:var(--muted)}
+.dict-t.on{background:var(--jade);border-color:var(--jade);color:#fff}
+.ex-paper{text-align:left;padding:20px 18px}
+.ex-item{display:flex;gap:10px;padding:14px 0;border-top:1px solid var(--rule)}
+.ex-item:first-of-type{border-top:0}
+.ex-n{width:26px;height:26px;border-radius:50%;background:var(--paper2);display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;margin-top:2px}
+.ex-text{font-size:18px;line-height:1.7;margin:4px 0 6px}
+.ex-q{font-size:17px;font-weight:600;margin:6px 0}
+.passage{font-size:18px;line-height:1.85;padding:12px 14px;border-radius:12px;background:var(--paper2);margin:8px 0 10px}
+.bank{display:grid;gap:6px;margin:6px 0 10px}
+.bank-row{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--rule);border-radius:10px;font-size:16px}
+.bank-row .k,.letter{width:26px;height:26px;border-radius:7px;border:1px solid var(--rule);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none;color:var(--muted)}
+.letters{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.letter{width:40px;height:40px;font-size:15px}
+.letter.sel,.opt.sel{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.opt.sel .k{border-color:var(--paper);color:var(--paper)}
+.pic{font-size:15px;padding:10px 12px;border:1px dashed var(--rule);border-radius:12px;margin:6px 0;line-height:1.5}
+.big-pic{font-size:20px;text-align:center;padding:18px}
+.pics{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.wr{width:100%;margin-top:8px;padding:12px;border:1px solid var(--rule);border-radius:12px;background:var(--paper);font:inherit;font-size:18px;color:var(--ink);resize:vertical;outline:0}
+.wr:focus{border-color:var(--ink)}
+.sound.dim{opacity:.45}
+.tw{cursor:pointer;border-bottom:1px dotted transparent;border-radius:3px;transition:background .15s}
+.tw:hover,.tw:active{background:var(--seal-soft);border-bottom-color:var(--seal)}
+.kk-times{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:13px;color:var(--ink2)}
+.kk-times span{padding:4px 9px;border-radius:8px;background:var(--paper2)}
+.backlink{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:14px;margin-bottom:10px}
 </style>
 </head>
 <body>

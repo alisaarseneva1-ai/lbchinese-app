@@ -20,6 +20,9 @@
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     sound: '<path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    exam: '<path d="M7 3h10v18H7z"/><path d="M10 7h4M10 11h4M10 15h2"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    ask: '<path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.5a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6 1M12 14v.01"/>',
     card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>',
   };
   const icon = (n, cls = "i") => `<svg class="${cls}" viewBox="0 0 24 24">${I[n]}</svg>`;
@@ -222,12 +225,41 @@
     build: w => { const t = (w.seg || "").split(" ").filter(x => x && !PUNCT.has(x)); if (t.length < 3 || t.length > 8) return null;
       let sh = t.slice(); for (let k = 0; k < 5 && sh.join() === t.join(); k++) shuffle(sh);
       return { kind: "build", eyebrow: "Соберите фразу", ru: w.ext, tokens: sh, answer: t, w, explain: `${w.ex} — ${w.exp}` }; },
-    grammar: (rule, sent, o, k) => { const right = o[k], oo = shuffle(o.slice()); return { kind: "grammar", eyebrow: "Правило: " + rule, zh: sent, zhOpts: 1, opts: oo, correct: oo.indexOf(right), explain: sent.replace("＿＿", right) }; },
+    grammar: (rule, sent, o, k, key) => { const right = o[k], oo = shuffle(o.slice()); return { kind: "grammar", eyebrow: "Правило: " + rule, zh: sent, zhOpts: 1, opts: oo, correct: oo.indexOf(right), explain: sent.replace("＿＿", right), gkey: key }; },
     audio: a => canAudio() ? { kind: "audio", eyebrow: "Аудирование · " + a.part, lines: a.lines, ru: a.q, zhOpts: 1, opts: a.py && a.py.length === a.opts.length ? a.opts.map((o, i) => o + " " + a.py[i]) : a.opts.slice(), correct: a.ans,
       explain: a.lines.map(([s, t]) => (s ? s + "：" : "") + t).join("\n") + "\n\n" + a.ru } : null,
   };
-  const gramOfWeek = (lv, wk) => Object.values(P.lessons).filter(l => l.lv === lv && l.week === wk).flatMap(l => l.gq.map(q => [l.topic, ...q]));
-  const gramOfLevel = lv => Object.values(P.lessons).filter(l => l.lv === lv).flatMap(l => l.gq.map(q => [l.topic, ...q]));
+  const gramOfWeek = (lv, wk) => Object.values(P.lessons).filter(l => l.lv === lv && l.week === wk).flatMap(l => l.gq.map(q => [l.topic, ...q, l.lv + "-" + l.day]));
+  const gramOfLevel = lv => Object.values(P.lessons).filter(l => l.lv === lv).flatMap(l => l.gq.map(q => [l.topic, ...q, l.lv + "-" + l.day]));
+  // ---------- как учитель: разбор ошибки, похожее задание, работа над ошибками ----------
+  const TONE_N = py => [...py].filter(c => MARK[c]).map(c => MARK[c][1] + 1).join("-") || "—";
+  function whyText(q, chosen) {
+    if (!chosen) return "";
+    const w = q.w;
+    if (q.kind === "meaning" && w) { const o = (byLevel[w.lv] || []).find(x => x.m === chosen) || [...P.words.values()].find(x => x.m === chosen);
+      return (o ? `«${chosen}» — это ${o.h} (${o.p}). ` : "") + `А ${w.h} значит «${w.m}».`; }
+    if (["reverse", "listen", "gap"].includes(q.kind)) { const o = word(chosen); if (o) return `${o.h} (${o.p}) значит «${o.m}» — здесь не подходит.`; }
+    if (q.kind === "pinyin" && w) { const r = w.p.split("/")[0].trim(); return `Тоны ${w.h}: ${TONE_N(r)} (${r}), а вы выбрали ${TONE_N(chosen)}. Проговорите вслух, показывая рукой движение тона.`; }
+    if (q.kind === "translate") { const o = [...P.words.values()].find(x => x.ex === chosen); if (o && o.ext) return `«${chosen}» значит «${o.ext}».`; }
+    if (q.kind === "grammar") { const o = word(chosen); if (o) return `«${chosen}» — ${o.m}, здесь не подходит.`; }
+    return "";
+  }
+  function similar(q) {
+    const w = q.w;
+    if (w) { for (const k of shuffle(["meaning", "reverse", "pinyin", "gap", "listen"].filter(k => k !== q.kind))) { const x = k === "gap" ? EX.gap(w) : EX[k](w); if (x) return x; } }
+    if (q.kind === "grammar" && q.gkey) { const [lv, d] = q.gkey.split("-").map(Number), l = lesson(lv, d);
+      if (l && l.gq.length) { const pool = l.gq.filter(g => g[0] !== q.zh); const g = (pool.length ? pool : l.gq)[Math.floor(Math.random() * (pool.length || l.gq.length))]; return EX.grammar(l.topic, ...g, q.gkey); } }
+    return null;
+  }
+  function weakSet(keys) {
+    const out = [];
+    (keys || []).forEach(k => {
+      if (k.startsWith("w:")) { const w = word(k.slice(2)); if (w) { const mk = [EX.meaning, EX.reverse, EX.pinyin, x => EX.gap(x)]; out.push(mk[Math.floor(Math.random() * 4)](w) || EX.meaning(w)); } }
+      else if (k.startsWith("g:")) { const [lv, d] = k.slice(2).split("-").map(Number), l = lesson(lv, d); if (l && l.gq.length) out.push(EX.grammar(l.topic, ...l.gq[Math.floor(Math.random() * l.gq.length)], k.slice(2))); }
+    });
+    out.forEach(x => { x.eyebrow = "Работа над ошибками · " + x.eyebrow; x.retry = 1; });
+    return out;
+  }
   function lessonSet(l, ws) {
     const out = [], extra = ["pinyin", "listen", "gap"];
     ws.forEach((w, i) => { out.push(i % 2 ? EX.reverse(w) : EX.meaning(w)); const k = extra[i % 3]; out.push((k === "gap" ? EX.gap(w, ws) : EX[k](w)) || EX.pinyin(w)); });
@@ -235,7 +267,7 @@
     sh.slice(0, 2).forEach(w => { const x = EX.translate(w, ws); if (x) out.push(x); });
     sh.slice(2, 6).map(EX.build).filter(Boolean).slice(0, 2).forEach(x => out.push(x));
     shuffle(out);
-    return l.gq.map(q => EX.grammar(l.topic, ...q)).concat(out);
+    return l.gq.map(q => EX.grammar(l.topic, ...q, l.lv + "-" + l.day)).concat(out);
   }
   function testSet(ws, gram, aud, nw = 10, ng = 3, na = 2) {
     const mk = [EX.meaning, EX.reverse, EX.pinyin, w => EX.gap(w, ws)], out = [];
@@ -300,10 +332,17 @@
         ${l ? `<button class="primary" id="start">${cta}</button>` : ""}
       </div>
 
+      <div class="prep">
+        <button class="prep-card" id="hskP"><span class="zh">考</span><b>Подготовка к HSK</b><small>Пробные экзамены 3.0: аудирование, чтение, письмо</small></button>
+        <button class="prep-card" id="hskkP"><span class="zh">说</span><b>Подготовка к HSKK</b><small>Устный экзамен: задания и оценка голосом</small></button>
+      </div>
+
       <div class="list">
+        <button class="item" id="askT">${icon("ask")}<div class="grow"><div class="t">Спросить учителя</div><div class="s">Любой вопрос о китайском — ответ в чате</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="rev">${icon("repeat")}<div class="grow"><div class="t">Повторение</div><div class="s">${due ? `${due} ${plural(due, "слово ждёт", "слова ждут", "слов ждут")}` : "На сегодня всё повторено"}</div></div>${due ? `<span class="count">${due}</span>` : icon("chev", "i chev")}</button>
         <button class="item" id="talkC"><span class="ava">${chinaSVG("happy")}</span><div class="grow"><div class="t">Поболтать с Чиной</div><div class="s">Текстом и голосом · ${S.tl ? hsk(S.tl) : hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="dict">${icon("search")}<div class="grow"><div class="t">Словарь</div><div class="s">${P.words.size.toLocaleString("ru-RU")} слов HSK 1–9</div></div>${icon("chev", "i chev")}</button>
+        ${myWords().length ? `<button class="item" id="myd">${icon("book")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов</div></div>${icon("chev", "i chev")}</button>` : ""}
       </div>
 
       <div class="label">Уровень</div>
@@ -334,6 +373,10 @@
       speak(t[0], true);
     });
     on("dict", () => go(dictionary));
+    on("hskP", need(() => go(hskHub)));
+    on("hskkP", need(() => go(hskkHub)));
+    on("askT", need(() => askSheet()));
+    on("myd", () => go(myDictionary));
     on("lvl", () => ask("Пройти тест на уровень в чате с ботом?", () => send({ t: "level" })));
     on("pay", () => send({ t: "pay" }));
     on("lvset", levelSheet);
@@ -387,10 +430,12 @@
       const ws = lessonWords(lv, d);
       if (l.grammar) steps.push({ type: "rule", l });
       ws.forEach((w, i) => steps.push({ type: "word", w, n: i + 1, of: ws.length }));
-      ex = lessonSet(l, ws);
+      const todays = new Set(ws.map(w => "w:" + w.h));
+      ex = weakSet((S.wk || []).filter(k => !todays.has(k)).slice(0, 4)).concat(lessonSet(l, ws));
     }
     ex.forEach(q => steps.push({ type: "q", q }));
-    run(steps, (sc, tot, m) => ({ t: "lesson", l: lv, d, sc, tot, m: m.slice(0, 40) }), l.kind === "тест" ? "Тест" : "Урок");
+    run(steps, (sc, tot, m, r, g) => ({ t: "lesson", l: lv, d, sc, tot, m: m.slice(0, 40), r: r.slice(0, 60), g: g.slice(0, 20) }),
+        l.kind === "тест" ? "Тест" : "Урок", l.kind !== "тест");
   }
   function restDay(l) {
     $app.innerHTML = `<div class="paper" style="margin-top:8vh"><div class="rest-dog">${chinaSVG("sleepy")}</div><div class="zh" style="font-size:22px;font-weight:700">今天休息</div><div class="py">jīntiān xiūxi</div>
@@ -401,12 +446,14 @@
   function startReview() {
     const mk = [EX.meaning, EX.reverse, EX.pinyin, w => EX.gap(w)];
     const ws = shuffle((S.due || []).map(word).filter(Boolean));
-    run(ws.map(w => ({ type: "q", q: mk[Math.floor(Math.random() * 4)](w) || EX.meaning(w) })), (sc, tot, m, r) => ({ t: "review", r }), "Повторение");
+    const weak = weakSet((S.wk || []).filter(k => !(S.due || []).includes(k.slice(2))).slice(0, 5));
+    run(weak.map(q => ({ type: "q", q })).concat(ws.map(w => ({ type: "q", q: mk[Math.floor(Math.random() * 4)](w) || EX.meaning(w) }))),
+        (sc, tot, m, r, g) => ({ t: "review", r: r.slice(0, 60), g: g.slice(0, 20) }), "Повторение", true);
   }
 
-  function run(steps, payload, label) {
-    let i = 0, score = 0; const mistakes = [], results = [];
-    const total = steps.filter(s => s.type === "q").length;
+  function run(steps, payload, label, coach = false) {
+    let i = 0, score = 0; const mistakes = [], results = [], gres = [];
+    let total = steps.filter(s => s.type === "q").length;
     const draw = () => {
       const s = steps[i]; if (!s) return finish();
       const head = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round(i / steps.length * 100)}%"></i></div><span class="step-count">${i + 1}/${steps.length}</span></div>`;
@@ -434,13 +481,18 @@
           ${q.py ? `<div class="py">${esc(q.py)}</div>` : ""}
           ${q.ru ? `<div class="${q.zh ? "small muted" : "q-ru"}" style="margin-top:8px">${esc(q.ru)}</div>` : ""}
           ${q.say || q.lines ? `<button class="sound" id="play">${icon("sound")}Послушать${q.lines ? " ещё раз" : ""}</button>` : ""}</div>`;
-        const done = (ok, rightHtml) => {
+        const done = (ok, rightHtml, chosen = "") => {
           haptic(ok ? "success" : "error");
           if (ok) score++; else if (q.w) mistakes.push(q.w.h);
           if (q.w) results.push([q.w.h, ok ? 1 : 0]);
+          if (q.gkey) gres.push([q.gkey, ok ? 1 : 0]);
+          let again = "";
+          if (!ok && coach && !q.retry) { const t = similar(q); if (t) { t.retry = 1; t.eyebrow = "Ещё раз на ту же тему · " + t.eyebrow; steps.splice(Math.min(i + 3, steps.length), 0, { type: "q", q: t }); total++; again = `<div class="note">Через пару заданий будет похожее — закрепим 🐶</div>`; } }
+          const why = ok ? "" : whyText(q, chosen);
           const wline = q.w ? ` <span class="zh">${esc(q.w.h)}</span> · ${esc(q.w.p)} · ${esc(q.w.m)}` : "";
           document.getElementById("fb").innerHTML = `<div class="fb ${ok ? "ok" : "bad"}">${ok ? "Верно" : "Правильно: " + rightHtml}${wline ? (ok ? ":" : " ·") + wline : ""}</div>
-            ${q.explain && (!ok || q.kind === "audio" || q.kind === "grammar") ? `<div class="explain">${esc(q.explain).replace(/\n/g, "<br>")}</div>` : ""}
+            ${why ? `<div class="explain">💡 ${esc(why)}</div>` : ""}
+            ${q.explain && (!ok || q.kind === "audio" || q.kind === "grammar") ? `<div class="explain">${esc(q.explain).replace(/\n/g, "<br>")}</div>` : ""}${again}
             <div class="actions"><button class="primary" id="next">Дальше</button></div>`;
           const sk = document.getElementById("skip"); if (sk) sk.remove();
           document.getElementById("next").onclick = () => { i++; draw(); };
@@ -463,7 +515,7 @@
             <button class="skip" id="skip">Не знаю</button><div id="fb"></div>`;
           const answer = k => {
             $app.querySelectorAll(".opt").forEach(x => { x.onclick = null; const kk = +x.dataset.k; x.classList.add(kk === q.correct ? "ok" : kk === k ? "bad" : "dim"); });
-            done(k === q.correct, `<span class="${q.zhOpts ? "zh" : ""}">${esc(q.opts[q.correct])}</span>`);
+            done(k === q.correct, `<span class="${q.zhOpts ? "zh" : ""}">${esc(q.opts[q.correct])}</span>`, k >= 0 ? q.opts[k] : "");
           };
           $app.querySelectorAll(".opt").forEach(b => b.onclick = () => answer(+b.dataset.k));
           document.getElementById("skip").onclick = () => answer(-1);
@@ -488,7 +540,7 @@
           : `<div class="zh">没关系！</div><div class="ru">Ничего страшного — я помогу потренироваться.</div>`}</div></div>
         <div class="actions"><button class="primary" id="save">Сохранить результат</button></div>`;
       haptic("success");
-      document.getElementById("save").onclick = () => send(payload(score, total, [...new Set(mistakes)], results.slice(0, 60)));
+      document.getElementById("save").onclick = () => sendP(payload(score, total, [...new Set(mistakes)], results.slice(0, 60), gres.slice(0, 20)));
     };
     draw();
   }
@@ -547,6 +599,446 @@
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
   }
 
+  // =====================================================================
+  // ---------- Подготовка к HSK 3.0 и HSKK ----------
+  // =====================================================================
+  let EXAMS = null, GLOSS = {}, segMax = 1;
+  const store = {   // localStorage может быть недоступен — тогда всё работает без него
+    get(k, d) { try { const v = localStorage.getItem("lb_" + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem("lb_" + k, JSON.stringify(v)); } catch (e) {} },
+  };
+  async function loadExams() {
+    if (EXAMS) return EXAMS;
+    EXAMS = await (await fetch("exams.json", { cache: "no-cache" })).json();
+    GLOSS = EXAMS.gloss || {};
+    segMax = 1; P.words.forEach((_, h) => { if (h.length > segMax) segMax = h.length; });
+    return EXAMS;
+  }
+  const HAN = /[㐀-鿿]/;
+  const hanCount = s => [...(s || "")].filter(c => HAN.test(c)).length;
+
+  // ---------- мой словарь: слова из текстов → в повторение ----------
+  const myWords = () => store.get("my", []);
+  function learnWord(h, p, m) {
+    const list = myWords();
+    if (!list.some(x => x[0] === h)) { list.unshift([h, p, m, Date.now()]); store.set("my", list.slice(0, 500)); }
+    const pend = store.get("add", []);
+    if (!pend.some(x => x[0] === h)) { pend.push([h, p, m]); store.set("add", pend.slice(-80)); }
+    toast(`«${h}» — в словаре и повторении`);
+  }
+  // каждое отправление боту уносит с собой накопленные слова и непроверенные тексты
+  function withPending(payload) {
+    const out = Object.assign({}, payload);
+    const add = store.get("add", []), wq = store.get("wq", []);
+    if (add.length && !out.add) out.add = add.slice(0, 60);
+    if (wq.length && !out.w) out.wq = wq.slice(0, 3);
+    let s = JSON.stringify(out);
+    while (s.length > 4000 && out.wq && out.wq.length) { out.wq.pop(); if (!out.wq.length) delete out.wq; s = JSON.stringify(out); }
+    while (s.length > 4000 && out.add && out.add.length) { out.add.pop(); s = JSON.stringify(out); }
+    return out;
+  }
+  function sendP(payload) { const out = withPending(payload); afterSend(out); send(out); }
+  function afterSend(out) {
+    if (out.add) store.set("add", store.get("add", []).filter(x => !out.add.some(y => y[0] === x[0])));
+    if (out.wq) store.set("wq", store.get("wq", []).slice(out.wq.length));
+  }
+
+  // ---------- текст, в котором можно нажать любое слово ----------
+  function segment(text) {
+    const out = []; let i = 0; const s = String(text || "");
+    while (i < s.length) {
+      const c = s[i];
+      if (!HAN.test(c)) { let j = i; while (j < s.length && !HAN.test(s[j])) j++; out.push([s.slice(i, j), 0]); i = j; continue; }
+      let found = null;
+      for (let L = Math.min(segMax, s.length - i); L >= 1; L--) { const w = s.substr(i, L); if (P.words.has(w) || (L === 1 && GLOSS[w])) { found = w; break; } }
+      if (!found) found = c;
+      out.push([found, 1]); i += found.length;
+    }
+    return out;
+  }
+  const tapHtml = text => segment(text).map(([t, han]) => han ? `<span class="tw" data-w="${esc(t)}">${esc(t)}</span>` : esc(t)).join("").replace(/\n/g, "<br>");
+  function bindTaps(root) {
+    root.querySelectorAll(".tw").forEach(el => el.onclick = e => { e.stopPropagation(); haptic(); tapSheet(el.dataset.w); });
+  }
+  function tapSheet(h) {
+    const w = word(h), g = GLOSS[h];
+    const p = w ? w.p : g ? g[0] : "", m = w ? w.m : g ? g[1] : "";
+    const chars = !w && !g && h.length > 1 ? [...h].map(c => word(c) || (GLOSS[c] ? { h: c, p: GLOSS[c][0], m: GLOSS[c][1] } : null)).filter(Boolean) : [];
+    const mine = myWords().some(x => x[0] === h);
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    bg.innerHTML = `<div class="sheet center"><div class="grab"></div><div class="big zh" style="font-size:64px">${esc(h)}</div>
+      ${p ? `<div class="py">${esc(p)}</div>` : ""}<div class="ru">${esc(m || "нет в словаре")}</div>
+      ${chars.map(c => `<div class="small muted" style="margin-top:6px"><span class="zh">${esc(c.h)}</span> ${esc(c.p)} — ${esc(c.m)}</div>`).join("")}
+      <p class="muted small" style="margin-top:8px">${w ? hsk(w.lv) : g ? "Вне списка HSK" : ""}</p>
+      <button class="sound" id="say">${icon("sound")}Послушать</button>
+      ${w && w.ex ? `<div class="note"><span class="zh">${esc(w.ex)}</span><br><span class="small muted">${esc(w.ext)}</span></div>` : ""}
+      <div class="row" style="margin-top:18px;gap:8px">${(m && !mine) ? `<button class="primary" id="learn">Учить: в словарь и повторение</button>` : `<button class="secondary" disabled>${mine ? "Уже в вашем словаре ✓" : "Нет перевода"}</button>`}</div></div>`;
+    bg.querySelector("#say").onclick = e => { e.stopPropagation(); speak(h); };
+    const lb = bg.querySelector("#learn"); if (lb) lb.onclick = e => { e.stopPropagation(); learnWord(h, p, m); bg.remove(); };
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
+  }
+  function myDictionary() {
+    const list = myWords(), pend = store.get("add", []);
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <h2 style="font-size:24px">Мой словарь</h2>
+      <p class="muted small" style="margin:4px 0 12px">Слова, которые вы добавили из текстов экзамена. Они попадают в повторение у Чины${pend.length ? ` — ${pend.length} ${plural(pend.length, "слово уйдёт", "слова уйдут", "слов уйдут")} в бот при следующем сохранении результата` : ""}.</p>
+      ${list.length ? list.map(([h, p, m], k) => `<div class="entry"><span class="h zh">${esc(h)}</span><span><div class="p">${esc(p)}</div><div class="m">${esc(m)}</div></span><button class="small muted" data-del="${k}">убрать</button></div>`).join("")
+        : `<p class="center muted" style="padding:32px">Пока пусто. В текстах раздела «Чтение» нажмите на любое слово и выберите «Учить».</p>`}`;
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    $app.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { const l = myWords(); const [h] = l.splice(+b.dataset.del, 1)[0]; store.set("my", l); store.set("add", store.get("add", []).filter(x => x[0] !== h)); myDictionary(); });
+  }
+
+  // ---------- аудио экзамена: mp3 с GitHub, если нет — голос устройства ----------
+  let curAudio = null;
+  function stopAudio() { try { if (curAudio) { curAudio.pause(); curAudio = null; } speechSynthesis && speechSynthesis.cancel(); } catch (e) {} }
+  function playClip(aid, lines) {
+    return new Promise(res => {
+      stopAudio();
+      const fallback = () => {
+        if (!zhVoice) { toast("Нет китайского голоса на устройстве — откройте расшифровку"); return res(false); }
+        speechSynthesis.cancel();
+        lines.forEach(([who, t], k) => { const u = new SpeechSynthesisUtterance(t); u.voice = zhVoice; u.lang = zhVoice.lang; u.rate = .9;
+          u.pitch = who === "男" ? .75 : who === "女" ? 1.2 : 1; if (k === lines.length - 1) u.onend = () => res(true); speechSynthesis.speak(u); });
+      };
+      if (!aid) return fallback();
+      const a = new Audio(`audio/${aid}.mp3`); curAudio = a;
+      a.onended = () => res(true);
+      a.onerror = () => { if (curAudio === a) { curAudio = null; fallback(); } };
+      a.play().catch(() => { if (curAudio === a) { curAudio = null; fallback(); } });
+    });
+  }
+
+  // ---------- блок «Подготовка к HSK» ----------
+  const SEC_RU = { listening: "Аудирование", reading: "Чтение", writing: "Письмо", translation: "Перевод" };
+  const SEC_ZH = { listening: "听力", reading: "阅读", writing: "书写", translation: "翻译" };
+  let hubLevel = 0;
+  const examOf = lv => (EXAMS.hsk[String(lv)] || [])[0];
+  const secItems = s => s.parts.reduce((n, p) => n + p.items.length, 0);
+  async function hskHub() {
+    $app.innerHTML = `<div class="paper"><div class="eyebrow">Загружаю экзамены…</div></div>`;
+    try { await loadExams(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить экзамены<p class="muted small">${esc(e.message)}</p></div>`; return; }
+    if (!hubLevel) hubLevel = Math.min(Math.max(S.l || 1, 1), 7);
+    const ex = examOf(hubLevel), hist = store.get("ex_hist", {})[hubLevel] || [];
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="eyebrow">Подготовка к экзамену</div><h2 style="font-size:26px;margin-top:2px">HSK 3.0</h2>
+      <div class="tabs">${LEVELS.map(l => `<button class="tab ${hubLevel === l ? "on" : ""}" data-l="${l}">${hsk(l)}</button>`).join("")}</div>
+      ${ex ? `<div class="today-card"><div class="today-top"><div class="glyph zh"><span>考</span></div><div class="grow">
+          <div class="eyebrow">Пробный экзамен · ${ex.count} заданий</div><div class="today-title">${esc(ex.title)}</div>
+          <div class="today-meta">${ex.sections.map(s => `${SEC_RU[s.id]} ${secItems(s)} · ${s.minutes} мин`).join("<br>")}</div></div></div>
+          <button class="primary" id="full">Полный экзамен · ${ex.sections.reduce((m, s) => m + (s.minutes || 0), 0)} мин</button></div>
+        <div class="label">Тренировка по частям</div>
+        <div class="list">${ex.sections.map(s => `<button class="item" data-sec="${s.id}"><span class="sec-zh zh">${SEC_ZH[s.id]}</span><div class="grow"><div class="t">${SEC_RU[s.id]}</div><div class="s">${s.parts.length} ${plural(s.parts.length, "часть", "части", "частей")}, ${secItems(s)} заданий · ${s.minutes} мин${s.id === "reading" ? " · слова можно нажать" : ""}</div></div>${icon("chev", "i chev")}</button>`).join("")}</div>
+        ${hist.length ? `<div class="label">Ваши результаты</div><div class="list" style="padding:4px 16px">${hist.slice(0, 5).map(h => `<div class="level-row" style="grid-template-columns:1fr auto"><span class="small">${esc(h.d)} · ${esc(h.what)}</span><b>${h.pct}%</b></div>`).join("")}</div>` : ""}
+        <div class="list">
+          <button class="item" id="writeT">${icon("book")}<div class="grow"><div class="t">Тренажёр письма и сочинения</div><div class="s">Пишете — учитель-ИИ проверяет по критериям экзамена</div></div>${icon("chev", "i chev")}</button>
+          <button class="item" id="how">${icon("target")}<div class="grow"><div class="t">Как устроен экзамен</div><div class="s">Части, время, баллы</div></div>${icon("chev", "i chev")}</button>
+          <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов</div></div>${icon("chev", "i chev")}</button>
+        </div>
+        <p class="foot">Задания оригинальные и составлены по официальной структуре HSK 3.0 (汉考国际, 2025). Реальные варианты экзамена закрыты.</p>`
+      : `<p class="muted center" style="padding:30px">Для этого уровня экзамен готовится.</p>`}`;
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    $app.querySelectorAll(".tab").forEach(b => b.onclick = () => { hubLevel = +b.dataset.l; haptic(); hskHub(); });
+    if (!ex) return;
+    document.getElementById("full").onclick = () => ask(`Начать полный пробный экзамен ${hsk(hubLevel)}? Время каждой части ограничено, как на экзамене.`, () => go(() => examRun(ex, ex.sections.map(s => s.id), true)));
+    $app.querySelectorAll("[data-sec]").forEach(b => b.onclick = () => go(() => examRun(ex, [b.dataset.sec], false)));
+    document.getElementById("how").onclick = () => howSheet(ex);
+    document.getElementById("myd").onclick = () => go(myDictionary);
+    document.getElementById("writeT").onclick = () => go(() => writingHub(ex));
+  }
+  function howSheet(ex) {
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">${esc(ex.title.split("·")[0])}: как устроен экзамен</h2>
+      ${ex.sections.map(s => `<div class="label" style="margin:16px 0 6px">${SEC_ZH[s.id]} · ${SEC_RU[s.id]} · ${s.minutes} мин</div>
+        ${s.parts.map(p => `<div class="small" style="padding:4px 0"><b>${esc(p.title)}</b> — ${esc(p.ru)} <span class="muted">(${p.items.length})</span></div>`).join("")}`).join("")}
+      <p class="muted small" style="margin-top:14px">В приложении каждая часть оценивается по шкале 100 баллов. Ориентир: от 60% верных ответов — уровень сдан. Официальные проходные баллы HSK 3.0 пока не опубликованы.
+      ${ex.level <= 2 ? "На уровнях 1–2 каждую запись можно прослушать дважды." : "Начиная с 3 уровня каждая запись звучит один раз — как на экзамене."}</p></div>`;
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
+  }
+
+  // ---------- прохождение экзамена ----------
+  // экран = одно задание, группа заданий к одному тексту/записи или вся часть «соотнесите» с общим банком
+  function unitsOf(sec) {
+    const units = [];
+    sec.parts.forEach(p => {
+      if (p.type === "match") { units.push({ part: p, items: p.items, match: 1 }); return; }
+      let cur = null;
+      p.items.forEach(it => {
+        if (it.group && cur && cur.group === it.group) cur.items.push(it);
+        else { cur = { part: p, items: [it], group: it.group || null }; units.push(cur); }
+      });
+    });
+    return units;
+  }
+  const isObjective = it => !it.mode || it.mode === "char" || it.mode === "short";
+  function checkWrite(it, v) {
+    const clean = s => String(s || "").replace(/[\s，。！？、,.!?；;：:“”"']/g, "");
+    if (it.mode === "char") return clean(v) === clean(it.answer);
+    if (it.mode === "short") return [it.answer, ...(it.accept || [])].some(a => clean(a) && clean(v) === clean(a));
+    return null;
+  }
+  function examRun(ex, secIds, full) {
+    const secs = ex.sections.filter(s => secIds.includes(s.id));
+    const ans = {}, plays = {};
+    let si = 0, ui = 0, units = unitsOf(secs[0]), deadline = 0, timer = null, dictOn = !full;
+    const maxPlays = ex.level <= 2 ? 2 : 1;
+    const startSection = () => { units = unitsOf(secs[si]); ui = 0; deadline = Date.now() + (secs[si].minutes || 20) * 60000; intro(); };
+    const tick = () => {
+      const el = document.getElementById("clock"); if (!el) return;
+      const left = Math.max(0, deadline - Date.now()), m = Math.floor(left / 60000), s = Math.floor(left % 60000 / 1000);
+      el.textContent = `${m}:${String(s).padStart(2, "0")}`; el.classList.toggle("warn", left < 60000);
+      if (!left) { clearInterval(timer); timer = null; stopAudio(); toast("Время части вышло"); nextSection(); }
+    };
+    const nextSection = () => { stopAudio(); if (si + 1 < secs.length) { si++; startSection(); } else finish(); };
+    function intro() {
+      const s = secs[si];
+      $app.innerHTML = `<div class="paper" style="margin-top:6vh"><div class="sec-big zh">${SEC_ZH[s.id]}</div><div class="eyebrow">${esc(ex.title.split("·")[0])} · часть ${si + 1} из ${secs.length}</div>
+        <h2 style="margin-top:6px">${SEC_RU[s.id]}</h2><p class="muted" style="margin-top:6px">${secItems(s)} заданий · ${s.minutes} минут</p>
+        <div class="note">${s.parts.map(p => `<div class="small" style="margin-top:4px"><b>${esc(p.title)}</b> — ${esc(p.ru)}</div>`).join("")}
+        ${s.id === "listening" ? `<div class="small" style="margin-top:10px">🎧 ${maxPlays === 2 ? "Каждую запись можно прослушать два раза." : "Каждая запись звучит один раз, как на экзамене."} Наденьте наушники.</div>` : ""}
+        ${s.id === "reading" ? `<div class="small" style="margin-top:10px">📖 Нажмите на любое слово в тексте — увидите перевод и сможете добавить его в повторение${full ? " (в полном экзамене включается кнопкой «Словарь»)" : ""}.</div>` : ""}</div></div>
+        <div class="actions"><button class="primary" id="go">Начать — таймер ${s.minutes} мин</button></div>`;
+      document.getElementById("go").onclick = () => { if (timer) clearInterval(timer); deadline = Date.now() + (s.minutes || 20) * 60000; timer = setInterval(tick, 1000); draw(); };
+    }
+    function audioBtn(key, aid, lines, label) {
+      const used = plays[key] || 0, left = maxPlays - used;
+      return `<button class="sound ${left <= 0 ? "dim" : ""}" data-play="${esc(key)}" data-aid="${aid || ""}">${icon("sound")}${label}${left > 0 ? ` · осталось ${left}` : " · прослушано"}</button>`;
+    }
+    function draw() {
+      const s = secs[si], u = units[ui], p = u.part;
+      const pos = units.slice(0, ui).reduce((n, x) => n + x.items.length, 0);
+      const total = units.reduce((n, x) => n + x.items.length, 0);
+      const head = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round(pos / total * 100)}%"></i></div>
+        <span class="clock" id="clock"></span>${s.id === "reading" ? `<button class="dict-t ${dictOn ? "on" : ""}" id="dt">Словарь</button>` : ""}</div>`;
+      const txt = t => s.id === "reading" && dictOn ? tapHtml(t) : esc(t).replace(/\n/g, "<br>");
+      const bank = u.match ? `<div class="bank">${p.bank.map((b, k) => `<div class="bank-row"><span class="k">${"ABCDEFGH"[k]}</span><span class="${HAN.test(b) ? "zh" : ""}">${txt(b)}${p.bank_py && p.bank_py[k] ? `<div class="py-s">${esc(p.bank_py[k])}</div>` : ""}</span></div>`).join("")}</div>` : "";
+      const first = u.items[0];
+      const passage = first.passage ? `<div class="passage zh">${txt(first.passage)}</div>` : "";
+      const groupAudio = !u.match && u.items.length > 1 && first.audio ? audioBtn("a" + first.n, first.aid, first.audio, "Прослушать запись") : "";
+      const itemHtml = it => {
+        const a = ans[it.n];
+        let h = `<div class="ex-item"><div class="ex-n">${it.n}</div><div class="grow">`;
+        if (it.audio && (u.match || u.items.length === 1)) h += audioBtn("a" + it.n, it.aid, it.audio, "Прослушать");
+        if (it.q_audio && !it.audio && u.items.length > 1) h += audioBtn("q" + it.n, it.qid, [["", it.q_audio]], "Вопрос");
+        if (it.pic) h += `<div class="pic">${esc(it.pic)}</div>`;
+        if (it.pics) h += `<div class="pics">${it.pics.map(x => `<div class="pic">${esc(x)}</div>`).join("")}</div>`;
+        if (it.text) h += `<div class="ex-text ${HAN.test(it.text) ? "zh" : ""}">${txt(it.text)}${it.text_py ? `<div class="py-s">${esc(it.text_py)}</div>` : ""}</div>`;
+        if (it.q) h += `<div class="ex-q zh">${txt(it.q)}${it.q_py ? `<div class="py-s">${esc(it.q_py)}</div>` : ""}</div>`;
+        if (p.type === "choice") h += `<div class="opts">${it.options.map((o, k) => `<button class="opt ${HAN.test(o) ? "zh" : ""} ${a === k ? "sel" : ""}" data-n="${it.n}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><span>${esc(o)}${it.options_py && it.options_py[k] ? `<div class="py-s">${esc(it.options_py[k])}</div>` : ""}</span></button>`).join("")}</div>`;
+        else if (p.type === "match") h += `<div class="letters">${p.bank.map((_, k) => `<button class="letter ${a === k ? "sel" : ""}" data-n="${it.n}" data-k="${k}">${"ABCDEFGH"[k]}</button>`).join("")}</div>`;
+        else {
+          if (it.word) h += `<div class="small muted">Используйте слово: <b class="zh">${esc(it.word)}</b></div>`;
+          const big = !["char", "short"].includes(it.mode);
+          h += big ? `<textarea class="wr zh" data-n="${it.n}" rows="${it.mode === "sentence" ? 3 : 10}" placeholder="Пишите здесь иероглифами">${esc(a || "")}</textarea>
+                     <div class="small muted wc" data-c="${it.n}">${hanCount(a)} знаков${it.min_chars ? ` из ${it.min_chars}` : ""}</div>`
+                   : `<input class="wr zh" data-n="${it.n}" value="${esc(a || "")}" placeholder="${it.mode === "char" ? "Иероглиф" : "Ответ"}" autocomplete="off">`;
+        }
+        return h + `</div></div>`;
+      };
+      $app.innerHTML = head + `<div class="paper ex-paper"><div class="eyebrow">${SEC_ZH[s.id]} · ${esc(p.title)}</div><div class="small muted" style="margin:4px 0 10px">${esc(p.ru)}</div>
+        ${groupAudio}${passage}${bank}${u.items.map(itemHtml).join("")}</div>
+        <div class="row" style="margin-top:14px;gap:8px">${ui > 0 ? `<button class="secondary" id="prev" style="flex:1">Назад</button>` : ""}
+        <button class="primary" id="nextU" style="flex:2">${ui + 1 < units.length ? "Дальше" : si + 1 < secs.length ? "Закончить часть" : "Завершить экзамен"}</button></div>`;
+      tick();
+      $app.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { haptic(); ans[+b.dataset.n] = +b.dataset.k;
+        $app.querySelectorAll(`[data-n="${b.dataset.n}"][data-k]`).forEach(x => x.classList.toggle("sel", x === b)); });
+      $app.querySelectorAll(".wr").forEach(el => el.oninput = () => { ans[+el.dataset.n] = el.value; const c = $app.querySelector(`[data-c="${el.dataset.n}"]`);
+        if (c) { const it = u.items.find(x => x.n === +el.dataset.n); c.textContent = `${hanCount(el.value)} знаков${it && it.min_chars ? ` из ${it.min_chars}` : ""}`; } });
+      $app.querySelectorAll("[data-play]").forEach(b => b.onclick = async () => {
+        const key = b.dataset.play; if ((plays[key] || 0) >= maxPlays) return toast("Запись уже прослушана");
+        plays[key] = (plays[key] || 0) + 1;
+        const n = +key.slice(1), it = u.items.find(x => x.n === n) || first;
+        const left = maxPlays - plays[key]; b.innerHTML = `${icon("sound")}Звучит…`; b.classList.add("dim");
+        if (key[0] === "a") { await playClip(it.aid, it.audio); if (it.q_audio && u.items.length === 1) { await new Promise(r => setTimeout(r, 700)); await playClip(it.qid, [["", it.q_audio]]); } }
+        else await playClip(it.qid, [["", it.q_audio]]);
+        b.innerHTML = `${icon("sound")}${left > 0 ? `Ещё раз · осталось ${left}` : "Прослушано"}`; if (left > 0) b.classList.remove("dim");
+      });
+      bindTaps($app);
+      const dt = document.getElementById("dt"); if (dt) dt.onclick = () => { dictOn = !dictOn; draw(); };
+      const pv = document.getElementById("prev"); if (pv) pv.onclick = () => { stopAudio(); ui--; draw(); };
+      document.getElementById("nextU").onclick = () => {
+        stopAudio();
+        if (ui + 1 < units.length) { ui++; draw(); return; }
+        const empty = units.reduce((n, x) => n + x.items.filter(it => ans[it.n] === undefined || ans[it.n] === "").length, 0);
+        ask(empty ? `Без ответа: ${empty}. Закончить эту часть?` : "Закончить эту часть?", () => { if (timer) clearInterval(timer); timer = null; nextSection(); });
+      };
+      document.getElementById("x").onclick = () => ask("Выйти из экзамена? Ответы не сохранятся.", () => { if (timer) clearInterval(timer); stopAudio(); go(hskHub); });
+      window.scrollTo(0, 0);
+    }
+    function finish() {
+      if (timer) clearInterval(timer); stopAudio();
+      const res = {}, wrong = [], subj = [];
+      secs.forEach(s => { let c = 0, t = 0;
+        s.parts.forEach(p => p.items.forEach(it => {
+          if (p.type === "write" && !isObjective(it)) { const v = String(ans[it.n] || "").trim(); subj.push({ it, v, sec: s.id }); return; }
+          t++; const ok = p.type === "write" ? checkWrite(it, ans[it.n]) : ans[it.n] === it.answer;
+          if (ok) c++; else wrong.push({ it, p, s, a: ans[it.n] });
+        }));
+        res[s.id] = [c, t]; });
+      const objC = Object.values(res).reduce((n, r) => n + r[0], 0), objT = Object.values(res).reduce((n, r) => n + r[1], 0);
+      const pct = objT ? Math.round(objC / objT * 100) : 0;
+      const hist = store.get("ex_hist", {}); (hist[ex.level] = hist[ex.level] || []).unshift({ d: new Date().toLocaleDateString("ru-RU"), what: full ? "полный экзамен" : secs.map(s => SEC_RU[s.id]).join(", "), pct });
+      hist[ex.level] = hist[ex.level].slice(0, 10); store.set("ex_hist", hist);
+      const [ch, verdict] = pct >= 80 ? ["优", "Отлично — уровень сдан уверенно"] : pct >= 60 ? ["过", "Уровень сдан"] : ["练", "Пока не хватает баллов"];
+      $app.innerHTML = `<div class="paper" style="margin-top:4vh"><div class="stamp">${ch}</div><div class="eyebrow">${esc(ex.title.split("·")[0])} · ${full ? "полный экзамен" : SEC_RU[secs[0].id]}</div>
+        <h2 style="margin-top:6px">${verdict}</h2><div class="score"><b>${pct}%</b>верных ответов в заданиях с выбором</div>
+        <div class="note">${secs.map(s => res[s.id][1] ? `<div class="level-row" style="grid-template-columns:110px 1fr 70px"><b>${SEC_RU[s.id]}</b><div class="line"><i style="width:${Math.round(res[s.id][0] / res[s.id][1] * 100)}%"></i></div><span class="n">${Math.round(res[s.id][0] / res[s.id][1] * 100)} / 100</span></div>` : "").join("")}
+        ${subj.length ? `<div class="small" style="margin-top:8px">✍️ ${subj.length} ${plural(subj.length, "письменное задание", "письменных задания", "письменных заданий")} проверит учитель-ИИ — разбор придёт в чат.</div>` : ""}</div></div>
+        <div class="list">
+          ${wrong.length ? `<button class="item" id="rv">${icon("repeat")}<div class="grow"><div class="t">Разбор ошибок</div><div class="s">${wrong.length} ${plural(wrong.length, "задание", "задания", "заданий")} с объяснениями и расшифровкой</div></div>${icon("chev", "i chev")}</button>` : ""}
+          ${subj.length ? `<button class="item" id="sm">${icon("book")}<div class="grow"><div class="t">Образцы ответов к письму</div><div class="s">Сравните со своим текстом</div></div>${icon("chev", "i chev")}</button>` : ""}
+        </div>
+        <div class="actions"><button class="primary" id="save">${subj.some(x => x.v) ? "Сохранить и отправить письмо на проверку" : "Сохранить результат"}</button></div>`;
+      haptic(pct >= 60 ? "success" : "warning");
+      const rv = document.getElementById("rv"); if (rv) rv.onclick = () => review(wrong, 0);
+      const sm = document.getElementById("sm"); if (sm) sm.onclick = () => samples(subj);
+      document.getElementById("save").onclick = () => {
+        const w = subj.filter(x => x.v).map(x => [ex.level, x.it.n, x.v.slice(0, 900)]);
+        const payload = { t: "exam", lv: ex.level, full: full ? 1 : 0, sc: res, w: [] };
+        // всё, что не помещается в одно сообщение боту, уйдёт со следующими сохранениями
+        const rest = [];
+        w.forEach(x => { const tryP = Object.assign({}, payload, { w: payload.w.concat([x]) }); if (JSON.stringify(tryP).length < 3300) payload.w.push(x); else rest.push(x); });
+        if (rest.length) store.set("wq", store.get("wq", []).concat(rest));
+        sendP(payload);
+      };
+      function samples(list) {
+        $app.innerHTML = `<h2 style="font-size:22px">Образцы ответов</h2>` + list.map(x => `<div class="paper ex-paper" style="margin-top:12px;text-align:left">
+          <div class="eyebrow">Задание ${x.it.n}</div><div class="ex-text zh">${tapHtml(x.it.text || "")}</div>${x.it.word ? `<div class="small muted">Слово: <b class="zh">${esc(x.it.word)}</b></div>` : ""}
+          <div class="label" style="margin:12px 0 4px">Ваш ответ</div><div class="zh">${esc(x.v || "—")}</div>
+          <div class="label" style="margin:12px 0 4px">Образец</div><div class="zh">${tapHtml(x.it.sample || "")}</div>
+          ${x.it.explain ? `<div class="explain">${esc(x.it.explain)}</div>` : ""}</div>`).join("") + `<div class="actions"><button class="primary" id="bk2">Назад к результату</button></div>`;
+        bindTaps($app); document.getElementById("bk2").onclick = finish;
+      }
+    }
+    function review(list, k) {
+      const { it, p, s, a } = list[k];
+      const opt = i => p.type === "match" ? p.bank[i] : it.options ? it.options[i] : "";
+      const right = p.type === "write" ? (it.answer || it.sample || "") : opt(it.answer);
+      const yours = a === undefined || a === "" ? "нет ответа" : p.type === "write" ? a : opt(a);
+      const script = it.audio ? it.audio.map(([w, t]) => (w ? w + "：" : "") + t).join("\n") : "";
+      $app.innerHTML = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round((k + 1) / list.length * 100)}%"></i></div><span class="step-count">${k + 1}/${list.length}</span></div>
+        <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${SEC_ZH[s.id]} · ${esc(p.title)} · задание ${it.n}</div>
+        ${it.passage ? `<div class="passage zh">${tapHtml(it.passage)}</div>` : ""}
+        ${script ? `<div class="label" style="margin:10px 0 4px">Расшифровка записи</div><div class="passage zh">${tapHtml(script)}${it.q_audio ? "<br>" + tapHtml(it.q_audio) : ""}</div>` : it.q_audio ? `<div class="passage zh">${tapHtml(it.q_audio)}</div>` : ""}
+        ${it.text ? `<div class="ex-text zh">${tapHtml(it.text)}</div>` : ""}${it.q ? `<div class="ex-q zh">${tapHtml(it.q)}</div>` : ""}
+        <div class="fb bad" style="padding:0">Ваш ответ: <span class="zh">${esc(yours)}</span></div>
+        <div class="fb ok" style="padding:0;margin-top:6px">Правильно: <span class="zh">${esc(right)}</span></div>
+        ${it.explain ? `<div class="explain">💡 ${esc(it.explain)}</div>` : ""}
+        ${it.aid || it.audio ? `<button class="sound" id="pl">${icon("sound")}Прослушать ещё раз</button>` : ""}</div>
+        <div class="row" style="margin-top:14px;gap:8px">${k > 0 ? `<button class="secondary" id="pv" style="flex:1">Назад</button>` : ""}<button class="primary" id="nx" style="flex:2">${k + 1 < list.length ? "Следующая ошибка" : "К результату"}</button></div>
+        <button class="skip" id="askT">🐶 Не понятно — спросить учителя</button>`;
+      bindTaps($app);
+      const pl = document.getElementById("pl"); if (pl) pl.onclick = () => playClip(it.aid, it.audio || [["", it.q_audio]]);
+      const pv = document.getElementById("pv"); if (pv) pv.onclick = () => review(list, k - 1);
+      document.getElementById("nx").onclick = () => k + 1 < list.length ? review(list, k + 1) : finish();
+      document.getElementById("x").onclick = finish;
+      document.getElementById("askT").onclick = () => askSheet(`Экзамен ${hsk(ex.level)}, ${SEC_RU[s.id]}, задание ${it.n}. ${it.q_audio || it.q || it.text || ""} Мой ответ: ${yours}. Правильно: ${right}. Почему?`.slice(0, 600));
+    }
+    startSection();
+  }
+
+  // ---------- тренажёр письма ----------
+  function writingHub(ex) {
+    const tasks = [];
+    ex.sections.forEach(s => s.parts.forEach(p => p.items.forEach(it => { if (p.type === "write" && !isObjective(it)) tasks.push({ it, p }); })));
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="eyebrow">${hsk(ex.level)} · письменная часть</div><h2 style="font-size:24px;margin-top:2px">Тренажёр письма</h2>
+      <p class="muted small" style="margin-top:6px">Напишите ответ — учитель-ИИ проверит его по критериям экзамена: выполнение задания, грамматика, лексика, связность, иероглифы. Оценка и исправленный текст придут в чат.</p>
+      <div class="list">${tasks.map((t, k) => `<button class="item" data-k="${k}"><span class="sec-zh zh">${t.it.mode === "essay" ? "文" : t.it.mode === "translate" ? "译" : "句"}</span><div class="grow"><div class="t zh" style="font-weight:500">${esc((t.it.text || "").slice(0, 60))}${(t.it.text || "").length > 60 ? "…" : ""}</div><div class="s">${esc(t.p.title)}${t.it.min_chars ? ` · от ${t.it.min_chars} знаков` : ""}${t.it.word ? ` · слово ${esc(t.it.word)}` : ""}</div></div>${icon("chev", "i chev")}</button>`).join("") || `<p class="muted center" style="padding:24px">На этом уровне в экзамене нет письменных заданий со свободным ответом.</p>`}
+        <button class="item" id="own">${icon("book")}<div class="grow"><div class="t">Своя тема</div><div class="s">Любой текст на китайском — проверка и исправление</div></div>${icon("chev", "i chev")}</button></div>`;
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = () => go(hskHub);
+    $app.querySelectorAll("[data-k]").forEach(b => b.onclick = () => go(() => writeTask(ex, tasks[+b.dataset.k].it)));
+    document.getElementById("own").onclick = () => go(() => writeTask(ex, { n: 0, mode: "essay", text: "Свободная тема: напишите текст на китайском." }));
+  }
+  function writeTask(ex, it) {
+    const key = `draft_${ex.level}_${it.n}`;
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${hsk(ex.level)} · ${it.mode === "essay" ? "сочинение" : it.mode === "translate" ? "перевод" : "предложение"}</div>
+      ${it.pic ? `<div class="pic">${esc(it.pic)}</div>` : ""}${it.pics ? `<div class="pics">${it.pics.map(x => `<div class="pic">${esc(x)}</div>`).join("")}</div>` : ""}
+      <div class="ex-text ${HAN.test(it.text || "") ? "zh" : ""}">${HAN.test(it.text || "") ? tapHtml(it.text) : esc(it.text)}</div>
+      ${it.word ? `<div class="small muted">Используйте слово: <b class="zh">${esc(it.word)}</b></div>` : ""}
+      <textarea class="wr zh" id="ta" rows="${it.mode === "sentence" ? 4 : 12}" placeholder="Пишите иероглифами">${esc(store.get(key, ""))}</textarea>
+      <div class="small muted" id="wc"></div></div>
+      <div class="actions"><button class="primary" id="send">Отправить учителю на проверку</button></div>
+      ${it.sample ? `<button class="skip" id="smp">Показать образец</button><div id="smpv"></div>` : ""}`;
+    bindTaps($app);
+    const ta = document.getElementById("ta"), wc = document.getElementById("wc");
+    const upd = () => { wc.textContent = `${hanCount(ta.value)} знаков${it.min_chars ? ` из ${it.min_chars}` : ""}`; store.set(key, ta.value); };
+    ta.oninput = upd; upd();
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = () => go(() => writingHub(ex));
+    const sp = document.getElementById("smp"); if (sp) sp.onclick = () => { document.getElementById("smpv").innerHTML = `<div class="paper ex-paper" style="text-align:left;margin-top:8px"><div class="eyebrow">Образец</div><div class="zh">${tapHtml(it.sample)}</div></div>`; bindTaps($app); sp.remove(); };
+    document.getElementById("send").onclick = () => {
+      const v = ta.value.trim(); if (hanCount(v) < 2) return toast("Сначала напишите текст иероглифами");
+      sendP({ t: "write", lv: ex.level, n: it.n || 0, v: v.slice(0, 1100) });
+    };
+  }
+
+  // ---------- «Спросить учителя» ----------
+  function askSheet(prefill = "") {
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    bg.innerHTML = `<div class="sheet"><div class="grab"></div><div class="sheet-dog">${chinaSVG("think")}</div>
+      <h2 style="font-size:22px">Спросить учителя</h2><p class="muted small" style="margin-top:4px">Любой вопрос о китайском: правило, слово, задание, иероглиф, подготовка к экзамену. Учитель ответит в чате по-русски, с примерами.</p>
+      <textarea class="wr" id="aq" rows="5" placeholder="Например: чем отличаются 了 и 过?">${esc(prefill)}</textarea>
+      <button class="primary" id="go" style="margin-top:12px">Спросить</button></div>`;
+    bg.querySelector("#go").onclick = e => { e.stopPropagation(); const q = bg.querySelector("#aq").value.trim(); if (q.length < 3) return toast("Напишите вопрос");
+      sendP({ t: "ask", q: q.slice(0, 900) }); };
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
+  }
+
+  // ---------- блок «Подготовка к HSKK» ----------
+  let kkLevel = 0;
+  const KK_TYPE = { repeat: "Повторите услышанное", answer: "Ответьте на услышанный вопрос", question: "Ответьте на вопрос", picture: "Расскажите по картинке",
+    retell: "Перескажите услышанное", read: "Прочитайте вслух", situation: "Ситуация: ответьте по заданию", opinion: "Выскажите мнение" };
+  async function hskkHub() {
+    $app.innerHTML = `<div class="paper"><div class="eyebrow">Загружаю задания…</div></div>`;
+    try { await loadExams(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить задания<p class="muted small">${esc(e.message)}</p></div>`; return; }
+    const levels = EXAMS.hskk.levels; const L = levels[kkLevel] || levels[0];
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="eyebrow">Устный экзамен</div><h2 style="font-size:26px;margin-top:2px">HSKK <span class="serif muted" style="font-weight:500">口语</span></h2>
+      <div class="tabs">${levels.map((l, k) => `<button class="tab ${kkLevel === k ? "on" : ""}" data-l="${k}">${esc(l.name.replace("HSKK ", ""))}</button>`).join("")}</div>
+      <div class="today-card"><div class="today-top"><div class="glyph zh"><span>说</span></div><div class="grow">
+        <div class="eyebrow">${esc(L.name)} · ${esc(L.ru || "")}</div><div class="today-title">${L.sets[0].parts.map(p => `${esc(p.title)} ×${p.items.length}`).join(", ")}</div>
+        <div class="today-meta">${L.total_minutes ? `${L.total_minutes} мин, из них ${L.prep_minutes} мин на подготовку` : ""}${L.id === "hsk79" ? "<br>Устная часть экзамена HSK 7–9" : "<br>100 баллов, сдан от 60"}</div></div></div></div>
+      <div class="label">Варианты</div>
+      ${L.sets.map((st, si) => `<div class="list">${st.parts.map((p, pi) => `<button class="item" data-s="${si}" data-p="${pi}"><span class="sec-zh zh">${esc(p.title.slice(0, 2))}</span><div class="grow"><div class="t">${esc(st.title)} · ${esc(p.title)}</div><div class="s">${esc(p.ru || KK_TYPE[p.type] || "")} · ${p.items.length} ${plural(p.items.length, "задание", "задания", "заданий")}</div></div>${icon("chev", "i chev")}</button>`).join("")}
+        <button class="item" data-all="${si}">${icon("target")}<div class="grow"><div class="t">Пройти ${esc(st.title.toLowerCase())} целиком в чате</div><div class="s">Чина даёт задания по очереди, вы отвечаете голосовыми, она оценивает</div></div>${icon("chev", "i chev")}</button></div>`).join("")}
+      <p class="foot">Ответы оценивает учитель-ИИ: распознаёт речь, сверяет с заданием и ключевыми словами, разбирает ошибки. Это ориентир, а не официальная оценка.</p>`;
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    $app.querySelectorAll(".tab").forEach(b => b.onclick = () => { kkLevel = +b.dataset.l; haptic(); hskkHub(); });
+    $app.querySelectorAll("[data-p]").forEach(b => b.onclick = () => go(() => kkPart(L, +b.dataset.s, +b.dataset.p, 0)));
+    $app.querySelectorAll("[data-all]").forEach(b => b.onclick = () => ask("Пройти вариант в чате? Чина будет давать задания, а вы — отвечать голосовыми.", () => sendP({ t: "oral", k: [L.id, +b.dataset.all, 0, 0], all: 1 })));
+  }
+  function kkPart(L, si, pi, k) {
+    const p = L.sets[si].parts[pi], it = p.items[k];
+    let prepT = null;
+    const showText = it.text && (p.type !== "repeat" && p.type !== "answer" && p.type !== "retell");
+    $app.innerHTML = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round(k / p.items.length * 100)}%"></i></div><span class="step-count">${k + 1}/${p.items.length}</span></div>
+      <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${esc(L.name)} · ${esc(p.title)}</div><div class="small muted" style="margin:4px 0 12px">${esc(p.ru || KK_TYPE[p.type] || "")}</div>
+      ${it.audio ? `<button class="sound" id="pl">${icon("sound")}Прослушать задание</button>` : ""}
+      ${it.pic ? `<div class="pic big-pic">${esc(it.pic)}</div>` : ""}
+      ${showText ? `<div class="ex-text zh">${tapHtml(it.text)}</div>${it.py ? `<div class="py-s">${esc(it.py)}</div>` : ""}` : ""}
+      <div class="kk-times">${p.prep_seconds ? `<span>Подготовка: ${p.prep_seconds >= 60 ? Math.round(p.prep_seconds / 60) + " мин" : p.prep_seconds + " с"}</span>` : ""}<span>Ответ: ${(it.answer_seconds || p.answer_seconds || 0) >= 60 ? Math.round((it.answer_seconds || p.answer_seconds) / 60 * 10) / 10 + " мин" : (it.answer_seconds || p.answer_seconds || 10) + " с"}</span></div>
+      ${p.prep_seconds ? `<button class="secondary" id="prep" style="margin-top:10px">⏱ Таймер подготовки</button>` : ""}
+      <div id="extra"></div></div>
+      <div class="actions"><button class="primary" id="voice">🎙 Ответить голосом — Чина оценит</button></div>
+      <div class="row" style="margin-top:8px;gap:8px"><button class="secondary" id="smp" style="flex:1">Образец ответа</button>${k + 1 < p.items.length ? `<button class="secondary" id="nx" style="flex:1">Следующее</button>` : ""}</div>`;
+    bindTaps($app);
+    const pl = document.getElementById("pl"); if (pl) { pl.onclick = () => playClip(it.aid, [["", it.audio]]); }
+    const pr = document.getElementById("prep"); if (pr) pr.onclick = () => {
+      if (prepT) return; let left = p.prep_seconds;
+      prepT = setInterval(() => { left--; pr.textContent = `⏱ Подготовка: ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`; if (left <= 0) { clearInterval(prepT); prepT = null; pr.textContent = "Время подготовки вышло — отвечайте!"; haptic("warning"); } }, 1000); };
+    document.getElementById("smp").onclick = () => {
+      document.getElementById("extra").innerHTML = `<div class="label" style="margin:14px 0 4px">Образец</div><div class="zh">${tapHtml(it.sample || "")}</div>
+        ${it.audio && (p.type === "repeat" || p.type === "answer" || p.type === "retell") ? `<div class="label" style="margin:14px 0 4px">Текст задания</div><div class="zh">${tapHtml(it.audio)}</div>` : ""}
+        ${it.ru ? `<div class="small muted" style="margin-top:6px">${esc(it.ru)}</div>` : ""}
+        ${it.keys ? `<div class="small" style="margin-top:8px">Ключевые слова: <span class="zh">${it.keys.map(esc).join("、")}</span></div>` : ""}
+        <button class="sound" id="sps">${icon("sound")}Послушать образец</button>`;
+      bindTaps($app); document.getElementById("sps").onclick = () => speak(it.sample || "");
+    };
+    const nx = document.getElementById("nx"); if (nx) nx.onclick = () => { if (prepT) clearInterval(prepT); stopAudio(); kkPart(L, si, pi, k + 1); };
+    document.getElementById("voice").onclick = () => sendP({ t: "oral", k: [L.id, si, pi, k] });
+    document.getElementById("x").onclick = () => { if (prepT) clearInterval(prepT); stopAudio(); go(hskkHub); };
+  }
+
   // ---------- старт ----------
   if (tg) {
     tg.ready(); tg.expand();
@@ -554,5 +1046,6 @@
     const bgc = getComputedStyle(document.documentElement).getPropertyValue("--paper").trim();
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
   }
-  load().then(toHome).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
+  const VIEW = new URLSearchParams(location.search).get("v");
+  load().then(() => VIEW === "hsk" ? go(hskHub) : VIEW === "hskk" ? go(hskkHub) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
