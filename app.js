@@ -20,6 +20,7 @@
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     sound: '<path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.6 5.6 3.6 9s-1 6.4-3.6 9c-2.6-2.6-3.6-5.6-3.6-9s1-6.4 3.6-9z"/>',
     home: '<path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
     exam: '<path d="M7 3h10v18H7z"/><path d="M10 7h4M10 11h4M10 15h2"/>',
@@ -289,13 +290,13 @@
 
   // ---------- нижнее меню ----------
   function navBar(active) {
-    const items = [["home", "Главная", "home"], ["exam", "Экзамены", "exams"], ["search", "Словарь", "dict"], ["user", "Профиль", "prof"]];
+    const items = [["home", "Главная", "home"], ["globe", "Жизнь", "life"], ["exam", "Экзамены", "exams"], ["search", "Словарь", "dict"], ["user", "Профиль", "prof"]];
     const nav = document.createElement("nav"); nav.className = "nav";
     nav.innerHTML = items.map(([ic, t, id]) => `<button class="${active === id ? "on" : ""}" data-tab="${id}" aria-label="${t}">${icon(ic)}<span>${t}</span></button>`).join("");
     document.querySelectorAll("nav.nav").forEach(n => n.remove());
     document.body.appendChild(nav);
     nav.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { haptic(); const t = b.dataset.tab;
-      go(t === "home" ? home : t === "exams" ? examsTab : t === "dict" ? dictionary : profileTab, false); });
+      go(t === "home" ? home : t === "life" ? lifeTab : t === "exams" ? examsTab : t === "dict" ? dictionary : profileTab, false); });
   }
   const dropNav = () => document.querySelectorAll("nav.nav").forEach(n => n.remove());
   const ringSvg = (pct, color = "#fff", track = "rgba(255,255,255,.2)") => { const r = 27, c = 2 * Math.PI * r;
@@ -346,6 +347,7 @@
           <span><b>Подготовка к HSKK</b><small>Устный экзамен</small></span></button>
       </div>
 
+      <button class="wide" id="lifeW" style="background:var(--navy);color:#fff"><span class="round" style="background:rgba(255,255,255,.14)">${icon("globe")}</span><span class="grow"><span class="t">Китайский для жизни</span><br><span class="s" style="color:rgba(255,255,255,.7)">Китай, работа, бизнес, для себя — ролевые игры</span></span>${icon("chev", "i chev")}</button>
       <button class="wide" id="askT"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Спросить учителя</span><br><span class="s">Любой вопрос о китайском — ответ в чате</span></span>${icon("chev", "i chev")}</button>
       ${S.demo ? `<div class="foot">Демо-режим · откройте приложение кнопкой в боте</div>` : ""}
     `;
@@ -358,6 +360,7 @@
     on("hskP", need(() => go(hskHub)));
     on("hskkP", need(() => go(hskkHub)));
     on("askT", need(() => askSheet()));
+    on("lifeW", () => go(lifeTab, false));
     on("pay", () => send({ t: "pay" }));
     let tap = 0;
     document.getElementById("dog").addEventListener("click", () => {
@@ -400,7 +403,8 @@
       <div class="list" style="margin-top:14px">
         <button class="item" id="lvl">${icon("target")}<div class="grow"><div class="t">Тест на уровень</div><div class="s">Слова, грамматика и аудирование, 10–20 минут</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Выбрать уровень самому</div><div class="s">Сейчас ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
-        <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов экзаменов</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов и фраз</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="fbk">${icon("ask")}<div class="grow"><div class="t">Оставить отзыв</div><div class="s">Видит только команда LinguaBridge</div></div>${icon("chev", "i chev")}</button>
         <div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">${S.ok ? (S.a ? "до " + fmtDate(S.a) : "активен") : "закончился"}</div></div>${S.ok ? "" : `<button class="secondary" id="pay" style="width:auto;padding:10px 16px">Оформить</button>`}</div>
       </div>`;
     navBar("prof");
@@ -408,6 +412,7 @@
     on("lvl", () => ask("Пройти тест на уровень в чате с ботом?", () => send({ t: "level" })));
     on("lvset", levelSheet);
     on("myd", () => go(myDictionary));
+    on("fbk", feedbackSheet);
     on("pay", () => send({ t: "pay" }));
   }
 
@@ -1088,6 +1093,109 @@
     document.getElementById("x").onclick = () => { if (prepT) clearInterval(prepT); stopAudio(); go(hskkHub); };
   }
 
+  // =====================================================================
+  // ---------- Китайский для жизни: жизнь в Китае, работа, бизнес, для себя ----------
+  // =====================================================================
+  let LIFE = null;
+  async function loadLife() {
+    if (LIFE) return LIFE;
+    LIFE = await (await fetch("life.json", { cache: "no-cache" })).json();
+    if (!EXAMS) { try { await loadExams(); } catch (e) {} }   // словарик для нажатия на слова
+    return LIFE;
+  }
+  const TRACK_LOOK = { life: ["t-sky", "活"], work: ["t-cream", "工"], business: ["t-navy", "商"], self: ["t-rose", "乐"] };
+  async function lifeTab() {
+    $app.innerHTML = `<div class="paper"><div class="eyebrow">Загружаю…</div></div>`;
+    try { await loadLife(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить раздел<p class="muted small">${esc(e.message)}</p></div>`; navBar("life"); return; }
+    $app.innerHTML = `<div class="title-big" style="margin-top:4px">Китайский для жизни</div>
+      <div class="sub">Фразы, диалоги и ролевые игры с Чиной для реальных ситуаций</div>
+      <div class="tiles" style="margin-top:16px">${LIFE.tracks.map(t => { const [cls, hz] = TRACK_LOOK[t.id] || ["t-sky", "中"];
+        return `<button class="tile ${cls}" data-t="${t.id}" style="min-height:170px"><span class="hz" style="font-size:76px">${hz}</span><span class="ic">${icon("ask")}</span>
+          <span><b>${esc(t.title)}</b><small>${t.topics.length} ${plural(t.topics.length, "тема", "темы", "тем")}</small></span></button>`; }).join("")}</div>
+      <button class="wide" id="askT" style="margin-top:14px"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Нужна другая ситуация?</span><br><span class="s">Спросите учителя — подскажет фразы</span></span>${icon("chev", "i chev")}</button>`;
+    navBar("life");
+    $app.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { haptic(); go(() => lifeTrack(b.dataset.t)); });
+    document.getElementById("askT").onclick = () => S.ok ? askSheet("Как сказать по-китайски в ситуации: ") : toast("Нужна подписка");
+  }
+  function lifeTrack(tid) {
+    const t = LIFE.tracks.find(x => x.id === tid); if (!t) return go(lifeTab, false);
+    const done = store.get("life_done", {});
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="title-big" style="margin-top:4px">${esc(t.title)}</div><div class="sub">${esc(t.ru || "")}</div>
+      <div class="list" style="margin-top:16px">${t.topics.map(tp => `<button class="item" data-p="${tp.id}"><span class="round" style="background:var(--sky2);font-size:20px">${esc(tp.emoji || "💬")}</span>
+        <div class="grow"><div class="t">${esc(tp.title)}</div><div class="s">${esc(tp.level || "")} · ${tp.phrases.length} фраз · ролевая игра</div></div>${done[tid + ":" + tp.id] ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div>`;
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = () => go(lifeTab, false);
+    $app.querySelectorAll("[data-p]").forEach(b => b.onclick = () => { haptic(); go(() => lifeTopic(tid, b.dataset.p)); });
+  }
+  function lifeTopic(tid, pid) {
+    const t = LIFE.tracks.find(x => x.id === tid), tp = t && t.topics.find(x => x.id === pid);
+    if (!tp) return go(lifeTab, false);
+    const quizState = {};
+    const draw = () => {
+      $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+        <div class="row" style="margin-top:4px"><span style="font-size:40px">${esc(tp.emoji || "💬")}</span><div class="grow"><div class="title-big" style="margin:0">${esc(tp.title)}</div><div class="sub">${esc(t.title)} · ${esc(tp.level || "")}</div></div></div>
+        <p style="margin-top:12px;color:var(--ink2)">${esc(tp.intro)}</p>
+
+        <div class="hero" style="margin-top:16px"><div class="glyph-bg">演</div><span class="hk">🎭 Ролевая игра с Чиной</span>
+          <h3 style="font-size:18px;max-width:100%">Чина — ${esc(tp.role.ai_role)}</h3>
+          <div class="meta">Ваша задача: ${esc(tp.role.user_goal)}</div>
+          <div class="row2"><button class="go" id="role">Начать — голосом или текстом</button></div></div>
+
+        <div class="label">Главные фразы</div>
+        <div class="pcard" style="margin-top:0;padding:6px 14px">${tp.phrases.map((p, i) => `<div class="phrase"><button class="sound-mini" data-ph="${i}">${icon("sound")}</button>
+          <div class="grow"><div class="zh ph-zh">${tapHtml(p.zh)}</div><div class="py-s">${esc(p.py)}</div><div class="small">${esc(p.ru)}</div>${p.note ? `<div class="small muted" style="margin-top:2px">💡 ${esc(p.note)}</div>` : ""}</div></div>`).join("")}
+          <button class="secondary" id="learnAll" style="margin:12px 0 8px">Добавить все фразы в повторение</button></div>
+
+        <div class="label">Диалог</div>
+        <div class="pcard" style="margin-top:0"><button class="sound" id="dlg" style="margin-top:0">${icon("sound")}Прослушать диалог целиком</button>
+          ${tp.dialogue.map((d, i) => `<div class="dl ${d.who === "女" ? "f" : "m"}"><button class="sound-mini" data-dl="${i}">${icon("sound")}</button><div class="grow"><div class="zh">${d.who ? `<b>${esc(d.who)}：</b>` : ""}${tapHtml(d.zh)}</div><div class="py-s">${esc(d.py || "")}</div><div class="small muted">${esc(d.ru)}</div></div></div>`).join("")}</div>
+
+        <div class="label">Полезно знать</div>
+        <div class="pcard t-cream" style="margin-top:0;background:var(--cream)">${esc(tp.culture)}</div>
+
+        <div class="label">Проверьте себя</div>
+        ${tp.quiz.map((q, qi) => `<div class="pcard" style="margin-top:8px"><div style="font-weight:600">${esc(q.q)}</div>
+          <div class="opts" style="margin-top:10px">${q.options.map((o, k) => { const st = quizState[qi]; const cls = st === undefined ? "" : k === q.answer ? "ok" : k === st ? "bad" : "dim";
+            return `<button class="opt ${cls} ${HAN.test(o) ? "zh" : ""}" data-q="${qi}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><span>${esc(o)}</span></button>`; }).join("")}</div>
+          ${quizState[qi] !== undefined ? `<div class="explain">${quizState[qi] === q.answer ? "✅ " : "💡 "}${esc(q.explain)}</div>` : ""}</div>`).join("")}
+        <div class="actions"><button class="primary" id="role2">🎭 Ролевая игра с Чиной</button></div>`;
+      const bk = document.getElementById("bk"); if (bk) bk.onclick = () => go(() => lifeTrack(tid));
+      bindTaps($app);
+      $app.querySelectorAll("[data-ph]").forEach(b => b.onclick = () => { const p = tp.phrases[+b.dataset.ph]; playClip(p.aid, [["", p.zh]]); });
+      $app.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => { const d = tp.dialogue[+b.dataset.dl]; playClip(d.aid, [[d.who || "", d.zh]]); });
+      document.getElementById("dlg").onclick = () => playClip(tp.dlg_aid, tp.dialogue.map(d => [d.who || "", d.zh]));
+      $app.querySelectorAll("[data-q]").forEach(b => b.onclick = () => { const qi = +b.dataset.q; if (quizState[qi] !== undefined) return;
+        quizState[qi] = +b.dataset.k; haptic(quizState[qi] === tp.quiz[qi].answer ? "success" : "error");
+        if (Object.keys(quizState).length === tp.quiz.length) { const d = store.get("life_done", {}); d[tid + ":" + pid] = 1; store.set("life_done", d); }
+        const y = window.scrollY; draw(); window.scrollTo(0, y); });
+      document.getElementById("learnAll").onclick = () => { tp.phrases.forEach(p => { const list = myWords(); if (!list.some(x => x[0] === p.zh)) { list.unshift([p.zh, p.py, p.ru, Date.now()]); store.set("my", list.slice(0, 500)); }
+          const pend = store.get("add", []); if (!pend.some(x => x[0] === p.zh)) { pend.push([p.zh, p.py, p.ru]); store.set("add", pend.slice(-80)); } });
+        toast(`${tp.phrases.length} фраз — в словаре и повторении`); };
+      const startRole = () => S.ok ? ask("Начать ролевую игру в чате? Чина начнёт первой — отвечайте текстом или голосовыми.", () => sendP({ t: "role", k: [tid, pid] })) : toast("Нужна подписка");
+      document.getElementById("role").onclick = startRole; document.getElementById("role2").onclick = startRole;
+    };
+    cleanup = () => stopAudio();
+    draw();
+  }
+
+  // ---------- отзыв ----------
+  function feedbackSheet() {
+    let r = 0;
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    const draw = () => {
+      bg.innerHTML = `<div class="sheet"><div class="grab"></div><div class="sheet-dog">${chinaSVG("love")}</div>
+        <h2 style="font-size:22px">Ваш отзыв</h2><p class="muted small" style="margin-top:4px">Его увидит только команда LinguaBridge — другим ученикам он не виден.</p>
+        <div class="stars">${[1, 2, 3, 4, 5].map(i => `<button data-s="${i}" class="${i <= r ? "on" : ""}">★</button>`).join("")}</div>
+        <textarea class="wr" id="fq" rows="4" placeholder="Что нравится, что улучшить, чего не хватает?"></textarea>
+        <button class="primary" id="go" style="margin-top:12px">Отправить отзыв</button></div>`;
+      bg.querySelectorAll("[data-s]").forEach(b => b.onclick = e => { e.stopPropagation(); const v = bg.querySelector("#fq").value; r = +b.dataset.s; haptic(); draw(); bg.querySelector("#fq").value = v; });
+      bg.querySelector("#go").onclick = e => { e.stopPropagation(); const q = bg.querySelector("#fq").value.trim();
+        if (!r && q.length < 3) return toast("Поставьте оценку или напишите пару слов");
+        sendP({ t: "fb", rt: r || null, q: q.slice(0, 1500) }); };
+    };
+    draw(); bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
+  }
+
   // ---------- старт ----------
   if (tg) {
     tg.ready(); tg.expand();
@@ -1096,5 +1204,5 @@
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
   }
   const VIEW = new URLSearchParams(location.search).get("v");
-  load().then(() => VIEW === "hsk" ? go(hskHub) : VIEW === "hskk" ? go(hskkHub) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
+  load().then(() => VIEW === "hsk" ? go(hskHub) : VIEW === "hskk" ? go(hskkHub) : VIEW === "life" ? go(lifeTab, false) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
