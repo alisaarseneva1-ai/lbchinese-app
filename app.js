@@ -20,6 +20,8 @@
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     sound: '<path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    home: '<path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
     exam: '<path d="M7 3h10v18H7z"/><path d="M10 7h4M10 11h4M10 15h2"/>',
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
     ask: '<path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.5a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6 1M12 14v.01"/>',
@@ -139,10 +141,14 @@
   const haptic = t => { try { if (!tg || !tg.HapticFeedback) return; t ? tg.HapticFeedback.notificationOccurred(t) : tg.HapticFeedback.selectionChanged(); } catch (e) {} };
   const fmtDate = iso => iso ? new Date(iso + "T12:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) : "";
   function toast(text) { const t = document.createElement("div"); t.className = "toast"; t.textContent = text; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+  const bytes = str => new TextEncoder().encode(str).length;
+  // true — данные ушли боту. Отправка работает, только если приложение открыто кнопкой внизу чата
   function send(payload) {
     const data = JSON.stringify(payload);
-    if (tg && !S.demo) tg.sendData(data);
-    else toast("Демо: откройте приложение из бота, чтобы сохранять прогресс");
+    if (!tg || S.demo) { toast("Демо: откройте приложение из бота, чтобы сохранять прогресс"); return false; }
+    if (tg.initDataUnsafe && tg.initDataUnsafe.query_id) { toast("Откройте приложение кнопкой «🏮 Открыть LinguaBridge» внизу чата — тогда результат сохранится"); return false; }
+    if (bytes(data) > 4090) { toast("Слишком много данных за раз — сохраните результат ещё раз"); return false; }
+    try { tg.sendData(data); return true; } catch (e) { toast("Не удалось отправить результат боту — попробуйте ещё раз"); return false; }
   }
   function ask(text, yes) { if (tg && tg.showConfirm) tg.showConfirm(text, ok => ok && yes()); else if (confirm(text)) yes(); }
   const word = h => P.words.get(h);
@@ -175,8 +181,12 @@
 
   // ---------- навигация ----------
   let depth = 0;
+  let cleanup = null;   // таймеры и звук экрана, который закрываем
   function go(screen, sub = true) {
+    if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
+    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
     depth = sub ? 1 : 0; window.scrollTo(0, 0);
+    document.querySelectorAll("nav.nav").forEach(n => n.remove());
     if (tg) depth ? tg.BackButton.show() : tg.BackButton.hide();
     screen();
   }
@@ -277,109 +287,128 @@
     return shuffle(out);
   }
 
+  // ---------- нижнее меню ----------
+  function navBar(active) {
+    const items = [["home", "Главная", "home"], ["exam", "Экзамены", "exams"], ["search", "Словарь", "dict"], ["user", "Профиль", "prof"]];
+    const nav = document.createElement("nav"); nav.className = "nav";
+    nav.innerHTML = items.map(([ic, t, id]) => `<button class="${active === id ? "on" : ""}" data-tab="${id}" aria-label="${t}">${icon(ic)}<span>${t}</span></button>`).join("");
+    document.querySelectorAll("nav.nav").forEach(n => n.remove());
+    document.body.appendChild(nav);
+    nav.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { haptic(); const t = b.dataset.tab;
+      go(t === "home" ? home : t === "exams" ? examsTab : t === "dict" ? dictionary : profileTab, false); });
+  }
+  const dropNav = () => document.querySelectorAll("nav.nav").forEach(n => n.remove());
+  const ringSvg = (pct, color = "#fff", track = "rgba(255,255,255,.2)") => { const r = 27, c = 2 * Math.PI * r;
+    return `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="${track}" stroke-width="6"/><circle cx="32" cy="32" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.min(1, pct))}"/></svg>`; };
+
   // ---------- главная ----------
   function home() {
     const l = lesson(S.l, S.d);
     const ws = l ? lessonWords(S.l, S.d) : [];
     const due = (S.due || []).filter(h => word(h)).length;
     const line = chinaLine(due);
-    const glyph = l && l.kind === "урок" && ws[0] ? ws[0].h[0] : l && l.kind === "тест" ? "考" : l ? "茶" : "学";
-
+    const glyph = l && l.kind === "урок" && ws[0] ? ws[0].h[0] : l && l.kind === "тест" ? "考" : "学";
     let title = "", meta = "", cta = "";
-    if (!l) { title = "Программа пройдена!"; meta = "Вы дошли до конца HSK 7–9. Повторяйте слова и болтайте с Чиной"; }
-    else if (l.kind === "урок") {
-      title = l.topic === "Новые слова" ? "Новые слова" : l.topic;
-      meta = `${ws.length} ${plural(ws.length, "слово", "слова", "слов")}${l.grammar ? " и правило" : ""} · около ${Math.max(8, ws.length * 2)} мин`;
-      cta = S.done ? "Следующий урок" : "Начать урок";
-    } else if (l.kind === "тест") { title = "Тест недели"; meta = "10 вопросов по словам недели · 5 мин"; cta = "Пройти тест"; }
-    else { title = "День отдыха"; meta = "Без новых слов — можно повторить или поговорить"; cta = "Отметить день"; }
-
-    // последние 7 дней: заливаем столько, сколько длится серия
-    const days = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"], today = new Date().getDay();
-    const streakEnd = S.done ? 0 : 1;
-    const week = Array.from({ length: 7 }, (_, i) => {
-      const back = 6 - i, on = back >= streakEnd && back < streakEnd + S.s;
-      return `<div class="${on ? "on" : ""} ${back === 0 ? "today" : ""}"><i></i>${days[(today - back + 7) % 7]}</div>`;
-    }).join("");
+    if (!l) { title = "Программа пройдена"; meta = "Вы дошли до конца HSK 7–9 — повторяйте и готовьтесь к экзамену"; }
+    else if (l.kind === "урок") { title = l.topic; meta = `${ws.length} ${plural(ws.length, "новое слово", "новых слова", "новых слов")}${l.grammar ? " и правило" : ""}, около ${Math.max(10, ws.length * 2)} минут`; cta = S.done ? "Следующий урок" : "Начать урок"; }
+    else if (l.kind === "тест") { title = "Тест недели"; meta = "Слова, грамматика и аудирование за неделю"; cta = "Пройти тест"; }
+    else { title = "День отдыха"; meta = "Можно повторить слова или поболтать с Чиной"; cta = "Отметить день"; }
+    const k = known(S.l), sz = size(S.l), pct = Math.min(1, k / sz);
 
     $app.innerHTML = `
-      <div class="row">
-        <div class="grow">
-          <div class="date serif">${zhDate()}</div>
-          <div class="greet"><span class="serif">${greeting()}</span>, ${esc(S.n)}</div>
+      <div class="top">
+        <button class="me" id="dog" aria-label="Погладить Чину">${chinaSVG(line[2])}</button>
+        <div class="grow"><div class="hi">${zhDate()}</div><div class="name">${esc(S.n)}</div></div>
+        <div class="streak" title="Дней подряд"><i>天</i>${S.s}</div>
+      </div>
+      <div class="title-big" id="bubble"><span class="zh">${esc(line[0])}</span><br>${esc(line[1])}</div>
+
+      ${S.ok ? "" : `<div class="notice"><b>Бесплатная неделя закончилась</b><p class="small" style="margin:4px 0 12px;color:var(--ink2)">Оформите подписку, чтобы продолжить уроки, экзамены и разговоры с Чиной.</p><button class="primary seal-btn" id="pay">Оформить подписку</button></div>`}
+
+      <div class="hero">
+        <div class="glyph-bg">${esc(glyph)}</div>
+        <span class="hk">${l ? `${hsk(l.lv)} · неделя ${l.week}` : "Готово"}</span>
+        <h3>${esc(title)}</h3><div class="meta">${esc(meta)}</div>
+        <div class="row2">
+          ${l ? (S.done ? `<span class="done">${icon("check")}Сегодня пройдено</span><button class="go" id="start">${cta}</button>` : `<button class="go" id="start">${cta}</button>`) : "<span></span>"}
+          <div class="ring" title="Слов уровня выучено">${ringSvg(pct)}<b>${Math.round(pct * 100)}%</b></div>
         </div>
-        <div class="seal" title="Дней подряд"><b>${S.s}</b><span>天</span></div>
-      </div>
-      <div class="week">${week}</div>
-
-      <div class="buddy">
-        <button class="buddy-dog" id="dog" aria-label="Погладить Чину">${chinaSVG(line[2])}</button>
-        <div class="bubble" id="bubble"><div class="zh">${esc(line[0])}</div><div class="ru">${esc(line[1])}</div></div>
       </div>
 
-      ${S.ok ? "" : `<div class="notice"><b>Бесплатная неделя закончилась</b><p class="small" style="margin:4px 0 12px;color:var(--ink2)">Оформите подписку, чтобы продолжить уроки и разговоры с Чиной.</p><button class="primary seal-btn" id="pay">Оформить подписку</button></div>`}
-
-      <div class="today-card">
-        <div class="today-top">
-          <div class="glyph zh"><span>${esc(glyph)}</span></div>
-          <div class="grow">
-            <div class="eyebrow">Сегодня${l ? ` · ${hsk(l.lv)}, неделя ${l.week}` : ""}</div>
-            <div class="today-title">${esc(title)}</div>
-            <div class="today-meta">${esc(meta)}</div>
-          </div>
-        </div>
-        ${S.done ? `<div class="done-note">${icon("check")}Урок на сегодня пройден</div>` : ""}
-        ${l ? `<button class="primary" id="start">${cta}</button>` : ""}
+      <div class="tiles">
+        <button class="tile t-sky" id="rev"><span class="hz">复</span><span class="ic">${icon("repeat")}</span>
+          <span><span class="num">${due || "✓"}</span><b style="margin-top:6px">Повторение</b><small>${due ? `${plural(due, "слово ждёт", "слова ждут", "слов ждут")} вас сегодня` : "На сегодня всё повторено"}</small></span></button>
+        <button class="tile t-cream" id="talkC"><span class="dog">${chinaSVG("happy")}</span><span class="ic">${icon("ask")}</span>
+          <span><b>Чина</b><small>Разговор текстом и голосом</small></span></button>
+        <button class="tile t-rose" id="hskP"><span class="hz">考</span><span class="ic">${icon("exam")}</span>
+          <span><b>Подготовка к HSK</b><small>Пробные экзамены 3.0</small></span></button>
+        <button class="tile t-navy" id="hskkP"><span class="hz">说</span><span class="ic">${icon("mic")}</span>
+          <span><b>Подготовка к HSKK</b><small>Устный экзамен</small></span></button>
       </div>
 
-      <div class="prep">
-        <button class="prep-card" id="hskP"><span class="zh">考</span><b>Подготовка к HSK</b><small>Пробные экзамены 3.0: аудирование, чтение, письмо</small></button>
-        <button class="prep-card" id="hskkP"><span class="zh">说</span><b>Подготовка к HSKK</b><small>Устный экзамен: задания и оценка голосом</small></button>
-      </div>
-
-      <div class="list">
-        <button class="item" id="askT">${icon("ask")}<div class="grow"><div class="t">Спросить учителя</div><div class="s">Любой вопрос о китайском — ответ в чате</div></div>${icon("chev", "i chev")}</button>
-        <button class="item" id="rev">${icon("repeat")}<div class="grow"><div class="t">Повторение</div><div class="s">${due ? `${due} ${plural(due, "слово ждёт", "слова ждут", "слов ждут")}` : "На сегодня всё повторено"}</div></div>${due ? `<span class="count">${due}</span>` : icon("chev", "i chev")}</button>
-        <button class="item" id="talkC"><span class="ava">${chinaSVG("happy")}</span><div class="grow"><div class="t">Поболтать с Чиной</div><div class="s">Текстом и голосом · ${S.tl ? hsk(S.tl) : hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
-        <button class="item" id="dict">${icon("search")}<div class="grow"><div class="t">Словарь</div><div class="s">${P.words.size.toLocaleString("ru-RU")} слов HSK 1–9</div></div>${icon("chev", "i chev")}</button>
-        ${myWords().length ? `<button class="item" id="myd">${icon("book")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов</div></div>${icon("chev", "i chev")}</button>` : ""}
-      </div>
-
-      <div class="label">Уровень</div>
-      <div class="list" style="margin-top:0;padding:4px 16px">
-        ${LEVELS.map(lv => { const k = known(lv), sz = size(lv), p = Math.min(100, Math.round(k / sz * 100));
-          return `<div class="level-row ${lv === S.l ? "cur" : ""}"><b>${lv >= 7 ? "7–9" : "HSK " + lv}</b><div class="line"><i style="width:${p}%"></i></div><span class="n">${lv < S.l ? "пройден" : `${k} / ${sz}`}</span></div>`; }).join("")}
-      </div>
-
-      <div class="list">
-        <button class="item" id="lvl">${icon("target")}<div class="grow"><div class="t">Тест на уровень</div><div class="s">Слова, грамматика и аудирование, 10–20 минут</div></div>${icon("chev", "i chev")}</button>
-        <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Выбрать уровень самому</div><div class="s">Сейчас ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
-        ${S.ok ? `<div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">${S.a ? "до " + fmtDate(S.a) : "активен"}</div></div></div>` : ""}
-      </div>
+      <button class="wide" id="askT"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Спросить учителя</span><br><span class="s">Любой вопрос о китайском — ответ в чате</span></span>${icon("chev", "i chev")}</button>
       ${S.demo ? `<div class="foot">Демо-режим · откройте приложение кнопкой в боте</div>` : ""}
     `;
+    navBar("home");
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
     const need = fn => () => S.ok ? fn() : toast("Нужна подписка");
     on("start", need(() => go(() => startLesson(S.l, S.d))));
     on("rev", need(() => due ? go(startReview) : toast("Новые слова появятся в повторении завтра")));
     on("talkC", need(() => talkSheet("china")));
+    on("hskP", need(() => go(hskHub)));
+    on("hskkP", need(() => go(hskkHub)));
+    on("askT", need(() => askSheet()));
+    on("pay", () => send({ t: "pay" }));
     let tap = 0;
     document.getElementById("dog").addEventListener("click", () => {
       haptic("success");
       const t = CHINA_TAPS[tap++ % CHINA_TAPS.length], dog = document.getElementById("dog"), bub = document.getElementById("bubble");
       dog.innerHTML = chinaSVG(t[2]); China.pet(dog);
-      bub.innerHTML = `<div class="zh">${esc(t[0])}</div><div class="ru">${esc(t[1])}</div>`;
-      bub.classList.remove("pop"); void bub.offsetWidth; bub.classList.add("pop");
+      bub.innerHTML = `<span class="zh">${esc(t[0])}</span><br>${esc(t[1])}`;
       speak(t[0], true);
     });
-    on("dict", () => go(dictionary));
-    on("hskP", need(() => go(hskHub)));
-    on("hskkP", need(() => go(hskkHub)));
-    on("askT", need(() => askSheet()));
-    on("myd", () => go(myDictionary));
+  }
+
+  // ---------- вкладка «Экзамены» ----------
+  function examsTab() {
+    const hist = store.get("ex_hist", {}); const last = Object.entries(hist).flatMap(([lv, a]) => a.slice(0, 1).map(x => ({ lv: +lv, ...x }))).slice(0, 3);
+    $app.innerHTML = `<div class="title-big" style="margin-top:4px">Экзамены</div><div class="sub">Пробные варианты в формате HSK 3.0 и устного HSKK</div>
+      <div class="big-tiles">
+        <button class="tile t-rose" id="hskP"><span class="hz" style="font-size:96px">考</span><span class="ic">${icon("exam")}</span>
+          <span><b>HSK 3.0</b><small>Уровни 1–6 и 7–9: аудирование, чтение, письмо, с таймером и баллами</small></span></button>
+        <button class="tile t-navy" id="hskkP"><span class="hz" style="font-size:96px">说</span><span class="ic">${icon("mic")}</span>
+          <span><b>HSKK</b><small>Устный экзамен: отвечаете голосом, Чина оценивает</small></span></button>
+        <button class="tile t-sky" id="wr" style="min-height:120px"><span class="hz" style="font-size:80px">写</span><span class="ic">${icon("book")}</span>
+          <span><b style="font-size:18px">Письмо и сочинение</b><small>Пишете — учитель проверяет по критериям экзамена</small></span></button>
+      </div>
+      ${last.length ? `<div class="pcard"><div class="label" style="margin:0 0 8px">Последние результаты</div>${last.map(x => `<div class="level-row" style="grid-template-columns:1fr auto"><span class="small">${hsk(x.lv)} · ${esc(x.what)} · ${esc(x.d)}</span><b>${x.pct}%</b></div>`).join("")}</div>` : ""}`;
+    navBar("exams");
+    const need = fn => () => S.ok ? fn() : toast("Нужна подписка");
+    document.getElementById("hskP").onclick = need(() => go(hskHub));
+    document.getElementById("hskkP").onclick = need(() => go(hskkHub));
+    document.getElementById("wr").onclick = need(async () => { await loadExams(); const ex = examOf(Math.min(Math.max(S.l || 1, 1), 7)); go(() => writingHub(ex)); });
+  }
+
+  // ---------- вкладка «Профиль» ----------
+  function profileTab() {
+    const cols = LEVELS.map(lv => { const p = Math.min(1, known(lv) / size(lv)); return `<div class="lv-col ${lv === S.l ? "cur" : ""}"><i><u style="height:${Math.max(4, Math.round(p * 100))}%"></u></i><small>${lv >= 7 ? "7–9" : lv}</small></div>`; }).join("");
+    const total = LEVELS.reduce((n, lv) => n + known(lv), 0);
+    $app.innerHTML = `<div class="top"><span class="me" style="width:64px;height:64px">${chinaSVG("love")}</span><div class="grow"><div class="name" style="font-size:22px">${esc(S.n)}</div><div class="hi">Сейчас ${hsk(S.l)} · ${S.s} ${plural(S.s, "день", "дня", "дней")} подряд</div></div></div>
+      <div class="pcard"><div class="row"><div class="grow"><div class="label" style="margin:0">Выучено слов</div><div class="title-big" style="margin:4px 0 0;font-size:34px">${total.toLocaleString("ru-RU")}</div></div>
+        <div class="ring">${ringSvg(Math.min(1, known(S.l) / size(S.l)), "var(--bord)", "var(--sky2)")}<b>${Math.round(Math.min(1, known(S.l) / size(S.l)) * 100)}%</b></div></div>
+        <div class="lv-grid">${cols}</div><p class="small muted" style="margin-top:8px">Столбики — доля слов каждого уровня в ваших карточках. Красный — ваш уровень.</p></div>
+      <div class="list" style="margin-top:14px">
+        <button class="item" id="lvl">${icon("target")}<div class="grow"><div class="t">Тест на уровень</div><div class="s">Слова, грамматика и аудирование, 10–20 минут</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Выбрать уровень самому</div><div class="s">Сейчас ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов экзаменов</div></div>${icon("chev", "i chev")}</button>
+        <div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">${S.ok ? (S.a ? "до " + fmtDate(S.a) : "активен") : "закончился"}</div></div>${S.ok ? "" : `<button class="secondary" id="pay" style="width:auto;padding:10px 16px">Оформить</button>`}</div>
+      </div>`;
+    navBar("prof");
+    const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
     on("lvl", () => ask("Пройти тест на уровень в чате с ботом?", () => send({ t: "level" })));
-    on("pay", () => send({ t: "pay" }));
     on("lvset", levelSheet);
+    on("myd", () => go(myDictionary));
+    on("pay", () => send({ t: "pay" }));
   }
 
   // ---------- выбор уровня ----------
@@ -484,7 +513,7 @@
         const done = (ok, rightHtml, chosen = "") => {
           haptic(ok ? "success" : "error");
           if (ok) score++; else if (q.w) mistakes.push(q.w.h);
-          if (q.w) results.push([q.w.h, ok ? 1 : 0]);
+          if (q.w && !q.retry) results.push([q.w.h, ok ? 1 : 0]);
           if (q.gkey) gres.push([q.gkey, ok ? 1 : 0]);
           let again = "";
           if (!ok && coach && !q.retry) { const t = similar(q); if (t) { t.retry = 1; t.eyebrow = "Ещё раз на ту же тему · " + t.eyebrow; steps.splice(Math.min(i + 3, steps.length), 0, { type: "q", q: t }); total++; again = `<div class="note">Через пару заданий будет похожее — закрепим 🐶</div>`; } }
@@ -552,7 +581,8 @@
       <label class="search">${icon("search")}<input id="q" placeholder="Иероглиф, пиньинь или перевод" value="${esc(dictQuery)}" autocomplete="off"></label>
       <div class="tabs">${[0, ...LEVELS].map(l => `<button class="tab ${dictLevel === l ? "on" : ""}" data-l="${l}">${l ? hsk(l) : "Все"}</button>`).join("")}</div>
       <div id="list"></div>`;
-    const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    const bk = document.getElementById("bk"); if (bk) bk.remove();
+    navBar("dict");
     const input = document.getElementById("q");
     const plain = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s/g, "");
     const render = () => {
@@ -633,11 +663,11 @@
     if (add.length && !out.add) out.add = add.slice(0, 60);
     if (wq.length && !out.w) out.wq = wq.slice(0, 3);
     let s = JSON.stringify(out);
-    while (s.length > 4000 && out.wq && out.wq.length) { out.wq.pop(); if (!out.wq.length) delete out.wq; s = JSON.stringify(out); }
-    while (s.length > 4000 && out.add && out.add.length) { out.add.pop(); s = JSON.stringify(out); }
+    while (bytes(s) > 3900 && out.wq && out.wq.length) { out.wq.pop(); if (!out.wq.length) delete out.wq; s = JSON.stringify(out); }
+    while (bytes(s) > 3900 && out.add && out.add.length) { out.add.pop(); if (!out.add.length) delete out.add; s = JSON.stringify(out); }
     return out;
   }
-  function sendP(payload) { const out = withPending(payload); afterSend(out); send(out); }
+  function sendP(payload) { const out = withPending(payload); if (send(out)) afterSend(out); }
   function afterSend(out) {
     if (out.add) store.set("add", store.get("add", []).filter(x => !out.add.some(y => y[0] === x[0])));
     if (out.wq) store.set("wq", store.get("wq", []).slice(out.wq.length));
@@ -781,6 +811,7 @@
     const ans = {}, plays = {};
     let si = 0, ui = 0, units = unitsOf(secs[0]), deadline = 0, timer = null, dictOn = !full;
     const maxPlays = ex.level <= 2 ? 2 : 1;
+    cleanup = () => { if (timer) clearInterval(timer); timer = null; stopAudio(); };
     const startSection = () => { units = unitsOf(secs[si]); ui = 0; deadline = Date.now() + (secs[si].minutes || 20) * 60000; intro(); };
     const tick = () => {
       const el = document.getElementById("clock"); if (!el) return;
@@ -788,7 +819,8 @@
       el.textContent = `${m}:${String(s).padStart(2, "0")}`; el.classList.toggle("warn", left < 60000);
       if (!left) { clearInterval(timer); timer = null; stopAudio(); toast("Время части вышло"); nextSection(); }
     };
-    const nextSection = () => { stopAudio(); if (si + 1 < secs.length) { si++; startSection(); } else finish(); };
+    let finished = false;
+    const nextSection = () => { stopAudio(); if (finished) return; if (si + 1 < secs.length) { si++; startSection(); } else finish(); };
     function intro() {
       const s = secs[si];
       $app.innerHTML = `<div class="paper" style="margin-top:6vh"><div class="sec-big zh">${SEC_ZH[s.id]}</div><div class="eyebrow">${esc(ex.title.split("·")[0])} · часть ${si + 1} из ${secs.length}</div>
@@ -848,8 +880,15 @@
         plays[key] = (plays[key] || 0) + 1;
         const n = +key.slice(1), it = u.items.find(x => x.n === n) || first;
         const left = maxPlays - plays[key]; b.innerHTML = `${icon("sound")}Звучит…`; b.classList.add("dim");
-        if (key[0] === "a") { await playClip(it.aid, it.audio); if (it.q_audio && u.items.length === 1) { await new Promise(r => setTimeout(r, 700)); await playClip(it.qid, [["", it.q_audio]]); } }
-        else await playClip(it.qid, [["", it.q_audio]]);
+        let played;
+        if (key[0] === "a") { played = await playClip(it.aid, it.audio); if (played && it.q_audio && u.items.length === 1) { await new Promise(r => setTimeout(r, 700)); await playClip(it.qid, [["", it.q_audio]]); } }
+        else played = await playClip(it.qid, [["", it.q_audio]]);
+        if (!played) {   // звук не воспроизвёлся — прослушивание не считаем и показываем текст записи
+          plays[key]--;
+          const lines = key[0] === "a" ? (it.audio || []).concat(it.q_audio && u.items.length === 1 ? [["", it.q_audio]] : []) : [["", it.q_audio]];
+          b.insertAdjacentHTML("afterend", `<div class="passage zh">${lines.map(([w, t]) => (w ? w + "：" : "") + esc(t)).join("<br>")}</div>`);
+          b.remove(); return;
+        }
         b.innerHTML = `${icon("sound")}${left > 0 ? `Ещё раз · осталось ${left}` : "Прослушано"}`; if (left > 0) b.classList.remove("dim");
       });
       bindTaps($app);
@@ -859,13 +898,19 @@
         stopAudio();
         if (ui + 1 < units.length) { ui++; draw(); return; }
         const empty = units.reduce((n, x) => n + x.items.filter(it => ans[it.n] === undefined || ans[it.n] === "").length, 0);
-        ask(empty ? `Без ответа: ${empty}. Закончить эту часть?` : "Закончить эту часть?", () => { if (timer) clearInterval(timer); timer = null; nextSection(); });
+        const atSection = si;
+        ask(empty ? `Без ответа: ${empty}. Закончить эту часть?` : "Закончить эту часть?", () => { if (si !== atSection || finished) return; if (timer) clearInterval(timer); timer = null; nextSection(); });
       };
       document.getElementById("x").onclick = () => ask("Выйти из экзамена? Ответы не сохранятся.", () => { if (timer) clearInterval(timer); stopAudio(); go(hskHub); });
       window.scrollTo(0, 0);
     }
+    let result = null;
     function finish() {
-      if (timer) clearInterval(timer); stopAudio();
+      if (timer) clearInterval(timer); stopAudio(); finished = true;
+      if (!result) result = score();
+      render(result);
+    }
+    function score() {
       const res = {}, wrong = [], subj = [];
       secs.forEach(s => { let c = 0, t = 0;
         s.parts.forEach(p => p.items.forEach(it => {
@@ -878,6 +923,9 @@
       const pct = objT ? Math.round(objC / objT * 100) : 0;
       const hist = store.get("ex_hist", {}); (hist[ex.level] = hist[ex.level] || []).unshift({ d: new Date().toLocaleDateString("ru-RU"), what: full ? "полный экзамен" : secs.map(s => SEC_RU[s.id]).join(", "), pct });
       hist[ex.level] = hist[ex.level].slice(0, 10); store.set("ex_hist", hist);
+      return { res, wrong, subj, pct };
+    }
+    function render({ res, wrong, subj, pct }) {
       const [ch, verdict] = pct >= 80 ? ["优", "Отлично — уровень сдан уверенно"] : pct >= 60 ? ["过", "Уровень сдан"] : ["练", "Пока не хватает баллов"];
       $app.innerHTML = `<div class="paper" style="margin-top:4vh"><div class="stamp">${ch}</div><div class="eyebrow">${esc(ex.title.split("·")[0])} · ${full ? "полный экзамен" : SEC_RU[secs[0].id]}</div>
         <h2 style="margin-top:6px">${verdict}</h2><div class="score"><b>${pct}%</b>верных ответов в заданиях с выбором</div>
@@ -896,9 +944,9 @@
         const payload = { t: "exam", lv: ex.level, full: full ? 1 : 0, sc: res, w: [] };
         // всё, что не помещается в одно сообщение боту, уйдёт со следующими сохранениями
         const rest = [];
-        w.forEach(x => { const tryP = Object.assign({}, payload, { w: payload.w.concat([x]) }); if (JSON.stringify(tryP).length < 3300) payload.w.push(x); else rest.push(x); });
-        if (rest.length) store.set("wq", store.get("wq", []).concat(rest));
-        sendP(payload);
+        w.forEach(x => { const tryP = Object.assign({}, payload, { w: payload.w.concat([x]) }); if (bytes(JSON.stringify(tryP)) < 3000) payload.w.push(x); else rest.push(x); });
+        const out = withPending(payload);
+        if (send(out)) { afterSend(out); if (rest.length) store.set("wq", store.get("wq", []).concat(rest.map(x => [x[0], x[1], x[2].slice(0, 600)]))); }
       };
       function samples(list) {
         $app.innerHTML = `<h2 style="font-size:22px">Образцы ответов</h2>` + list.map(x => `<div class="paper ex-paper" style="margin-top:12px;text-align:left">
@@ -1010,6 +1058,7 @@
   function kkPart(L, si, pi, k) {
     const p = L.sets[si].parts[pi], it = p.items[k];
     let prepT = null;
+    cleanup = () => { if (prepT) clearInterval(prepT); prepT = null; stopAudio(); };
     const showText = it.text && (p.type !== "repeat" && p.type !== "answer" && p.type !== "retell");
     $app.innerHTML = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round(k / p.items.length * 100)}%"></i></div><span class="step-count">${k + 1}/${p.items.length}</span></div>
       <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${esc(L.name)} · ${esc(p.title)}</div><div class="small muted" style="margin:4px 0 12px">${esc(p.ru || KK_TYPE[p.type] || "")}</div>
