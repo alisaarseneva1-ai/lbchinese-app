@@ -141,7 +141,7 @@ svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stro
 .entry .m{font-size:15px;color:var(--ink2)}
 .entry .lv{font-size:12px;color:var(--muted)}
 
-.backdrop{position:fixed;inset:0;background:rgba(20,16,12,.38);display:flex;align-items:flex-end;z-index:10;animation:fade .18s}
+.backdrop{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(20,16,12,.38);display:flex;align-items:flex-end;z-index:10;animation:fade .18s}
 @keyframes fade{from{opacity:0}}
 .sheet{background:var(--paper);width:100%;max-width:520px;margin:0 auto;border-radius:22px 22px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom));animation:up .22s ease}
 @keyframes up{from{transform:translateY(30px);opacity:0}}
@@ -305,7 +305,7 @@ h2{font-family:var(--head);font-weight:600;letter-spacing:-.3px}
 .hero .done{display:inline-flex;gap:6px;align-items:center;font-weight:600;font-size:14px;opacity:.9}
 .ring{width:64px;height:64px;flex:none;position:relative}
 .ring svg{width:64px;height:64px;transform:rotate(-90deg)}
-.ring b{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--head);font-size:14px;font-weight:600}
+.ring b{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-items:center;font-family:var(--head);font-size:14px;font-weight:600}
 
 /* плитки */
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}

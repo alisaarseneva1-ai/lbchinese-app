@@ -2,6 +2,9 @@
    Состояние ученика приходит от бота в ссылке (?s=...), результаты уходят боту через sendData. */
 (function () {
   "use strict";
+  // старые Android WebView: недостающие функции
+  if (!Array.prototype.flatMap) Object.defineProperty(Array.prototype, "flatMap", { configurable: true, writable: true,
+    value: function (f, t) { return this.reduce((acc, x, i, a) => acc.concat(f.call(t, x, i, a)), []); } });
   const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData !== undefined
     ? window.Telegram.WebApp : null;
   const $app = document.getElementById("app");
@@ -136,7 +139,7 @@
   let P = null, byLevel = {}, dictLevel = 0, dictQuery = "";
 
   // ---------- утилиты ----------
-  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const plural = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; };
   const haptic = t => { try { if (!tg || !tg.HapticFeedback) return; t ? tg.HapticFeedback.notificationOccurred(t) : tg.HapticFeedback.selectionChanged(); } catch (e) {} };
@@ -145,13 +148,42 @@
   const bytes = str => new TextEncoder().encode(str).length;
   // true — данные ушли боту. Отправка работает, только если приложение открыто кнопкой внизу чата
   function send(payload) {
-    const data = JSON.stringify(payload);
+    const er = store.get("errs", []);
+    if (er.length && !payload.er) payload = Object.assign({}, payload, { er: er.slice(0, 3) });
+    let data = JSON.stringify(payload);
+    if (bytes(data) > 4090 && payload.er) { payload = Object.assign({}, payload); delete payload.er; data = JSON.stringify(payload); }
     if (!tg || S.demo) { toast("Демо: откройте приложение из бота, чтобы сохранять прогресс"); return false; }
     if (tg.initDataUnsafe && tg.initDataUnsafe.query_id) { toast("Откройте приложение кнопкой «🏮 Открыть LinguaBridge» внизу чата — тогда результат сохранится"); return false; }
     if (bytes(data) > 4090) { toast("Слишком много данных за раз — сохраните результат ещё раз"); return false; }
-    try { tg.sendData(data); return true; } catch (e) { toast("Не удалось отправить результат боту — попробуйте ещё раз"); return false; }
+    try { tg.sendData(data); store.set("errs", []); return true; } catch (e) { toast("Не удалось отправить результат боту — попробуйте ещё раз"); return false; }
   }
-  function ask(text, yes) { if (tg && tg.showConfirm) tg.showConfirm(text, ok => ok && yes()); else if (confirm(text)) yes(); }
+  // подтверждение своим окном: системные окна Telegram на части Android-версий падают с ошибкой
+  function ask(text, yes) {
+    document.querySelectorAll(".backdrop.ask").forEach(x => x.remove());
+    const bg = document.createElement("div"); bg.className = "backdrop ask";
+    bg.innerHTML = `<div class="sheet"><div class="grab"></div><p style="font-size:17px;line-height:1.45;margin:6px 0 18px">${esc(text)}</p>
+      <div class="row" style="gap:8px"><button class="secondary" data-a="0" style="flex:1">Нет</button><button class="primary" data-a="1" style="flex:1">Да</button></div></div>`;
+    let done = false;
+    const close = ok => { if (done) return; done = true; bg.remove(); if (ok) { haptic(); yes(); } };
+    bg.addEventListener("click", e => { if (e.target === bg) close(false); });
+    bg.querySelectorAll("[data-a]").forEach(b => b.onclick = () => close(b.dataset.a === "1"));
+    document.body.appendChild(bg);
+  }
+  // занятие идёт: свайп вниз не сворачивает приложение, а закрытие требует подтверждения
+  function busy(on) {
+    if (!tg) return;
+    try { on ? tg.enableClosingConfirmation() : tg.disableClosingConfirmation(); } catch (e) {}
+  }
+  // любая непредвиденная ошибка: не оставляем ученика с «зависшим» экраном и запоминаем её для бота
+  const errs = [];
+  function caught(msg, where) {
+    const line = String(msg || "ошибка").slice(0, 160) + (where ? " @" + where : "");
+    if (errs.indexOf(line) < 0 && errs.length < 3) errs.push(line);
+    try { store.set("errs", errs); } catch (e) {}
+    toast("Что-то пошло не так 🙈 Нажмите кнопку ещё раз — ответы на месте");
+  }
+  window.addEventListener("error", ev => caught(ev.message, (ev.filename || "").split("/").pop() + ":" + ev.lineno));
+  window.addEventListener("unhandledrejection", ev => caught(ev.reason && ev.reason.message || ev.reason, "promise"));
   const word = h => P.words.get(h);
 
   // дата по-китайски: 九月二十八日 · 周一
@@ -375,12 +407,12 @@
   // ---------- вкладка «Экзамены» ----------
   function examsTab() {
     const hist = store.get("ex_hist", {}); const last = Object.entries(hist).flatMap(([lv, a]) => a.slice(0, 1).map(x => ({ lv: +lv, ...x }))).slice(0, 3);
-    $app.innerHTML = `<div class="title-big" style="margin-top:4px">Экзамены</div><div class="sub">Пробные варианты в формате HSK 3.0 и устного HSKK</div>
+    $app.innerHTML = `<div class="title-big" style="margin-top:4px">Экзамены</div><div class="sub">Пробные варианты в формате HSK 3.0, его устной части и HSKK</div>
       <div class="big-tiles">
         <button class="tile t-rose" id="hskP"><span class="hz" style="font-size:96px">考</span><span class="ic">${icon("exam")}</span>
-          <span><b>HSK 3.0</b><small>Уровни 1–6 и 7–9: аудирование, чтение, письмо, с таймером и баллами</small></span></button>
+          <span><b>HSK 3.0</b><small>Уровни 1–6 и 7–9: аудирование, чтение, письмо (на 7–9 и перевод), с таймером</small></span></button>
         <button class="tile t-navy" id="hskkP"><span class="hz" style="font-size:96px">说</span><span class="ic">${icon("mic")}</span>
-          <span><b>HSKK</b><small>Устный экзамен: отвечаете голосом, Чина оценивает</small></span></button>
+          <span><b>Устный экзамен</b><small>HSK 3.0 口语 (уровни 3–6), HSKK и 7–9: отвечаете голосом, Чина оценивает</small></span></button>
         <button class="tile t-sky" id="wr" style="min-height:120px"><span class="hz" style="font-size:80px">写</span><span class="ic">${icon("book")}</span>
           <span><b style="font-size:18px">Письмо и сочинение</b><small>Пишете — учитель проверяет по критериям экзамена</small></span></button>
       </div>
@@ -745,7 +777,8 @@
 
   // ---------- блок «Подготовка к HSK» ----------
   const SEC_RU = { listening: "Аудирование", reading: "Чтение", writing: "Письмо", translation: "Перевод" };
-  const SEC_ZH = { listening: "听力", reading: "阅读", writing: "书写", translation: "翻译" };
+  const SEC_ZH = { listening: "听力", reading: "阅读", writing: "写作", translation: "翻译" };
+  const secZh = s => s.name || SEC_ZH[s.id];   // на уровнях 2–3 письмо называется 书写, на 4–9 — 写作
   let hubLevel = 0;
   const examOf = lv => (EXAMS.hsk[String(lv)] || [])[0];
   const secItems = s => s.parts.reduce((n, p) => n + p.items.length, 0);
@@ -754,15 +787,19 @@
     try { await loadExams(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить экзамены<p class="muted small">${esc(e.message)}</p></div>`; return; }
     if (!hubLevel) hubLevel = Math.min(Math.max(S.l || 1, 1), 7);
     const ex = examOf(hubLevel), hist = store.get("ex_hist", {})[hubLevel] || [];
+    let run = store.get("ex_run", null);
+    if (run && (!run.ts || Date.now() - run.ts > 12 * 3600000)) { store.set("ex_run", null); run = null; }
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <div class="eyebrow">Подготовка к экзамену</div><h2 style="font-size:26px;margin-top:2px">HSK 3.0</h2>
       <div class="tabs">${LEVELS.map(l => `<button class="tab ${hubLevel === l ? "on" : ""}" data-l="${l}">${hsk(l)}</button>`).join("")}</div>
+      ${run && examOf(run.lv) ? `<button class="primary" id="resume" style="margin:12px 0 4px">Продолжить незаконченный экзамен ${hsk(run.lv)}</button>` : ""}
       ${ex ? `<div class="today-card"><div class="today-top"><div class="glyph zh"><span>考</span></div><div class="grow">
           <div class="eyebrow">Пробный экзамен · ${ex.count} заданий</div><div class="today-title">${esc(ex.title)}</div>
           <div class="today-meta">${ex.sections.map(s => `${SEC_RU[s.id]} ${secItems(s)} · ${s.minutes} мин`).join("<br>")}</div></div></div>
-          <button class="primary" id="full">Полный экзамен · ${ex.sections.reduce((m, s) => m + (s.minutes || 0), 0)} мин</button></div>
+          <button class="primary" id="full">Полный экзамен · ${ex.sections.reduce((m, s) => m + (s.minutes || 0), 0)} мин</button>
+          ${ex.minutes ? `<div class="small muted" style="margin-top:6px">На настоящем экзамене ≈${ex.minutes} мин: сюда входит заполнение личных данных и бланка ответов.${ex.level >= 3 ? ` Устная часть ${ex.level >= 7 ? "HSK 7–9" : "HSK " + ex.level + " 口语"} сдаётся отдельно — тренируйте её в разделе «Устный экзамен».` : ""}</div>` : ""}</div>
         <div class="label">Тренировка по частям</div>
-        <div class="list">${ex.sections.map(s => `<button class="item" data-sec="${s.id}"><span class="sec-zh zh">${SEC_ZH[s.id]}</span><div class="grow"><div class="t">${SEC_RU[s.id]}</div><div class="s">${s.parts.length} ${plural(s.parts.length, "часть", "части", "частей")}, ${secItems(s)} заданий · ${s.minutes} мин${s.id === "reading" ? " · слова можно нажать" : ""}</div></div>${icon("chev", "i chev")}</button>`).join("")}</div>
+        <div class="list">${ex.sections.map(s => `<button class="item" data-sec="${s.id}"><span class="sec-zh zh">${secZh(s)}</span><div class="grow"><div class="t">${SEC_RU[s.id]}</div><div class="s">${s.parts.length} ${plural(s.parts.length, "часть", "части", "частей")}, ${secItems(s)} заданий · ${s.minutes} мин${s.id === "reading" ? " · слова можно нажать" : ""}</div></div>${icon("chev", "i chev")}</button>`).join("")}</div>
         ${hist.length ? `<div class="label">Ваши результаты</div><div class="list" style="padding:4px 16px">${hist.slice(0, 5).map(h => `<div class="level-row" style="grid-template-columns:1fr auto"><span class="small">${esc(h.d)} · ${esc(h.what)}</span><b>${h.pct}%</b></div>`).join("")}</div>` : ""}
         <div class="list">
           <button class="item" id="writeT">${icon("book")}<div class="grow"><div class="t">Тренажёр письма и сочинения</div><div class="s">Пишете — учитель-ИИ проверяет по критериям экзамена</div></div>${icon("chev", "i chev")}</button>
@@ -772,6 +809,8 @@
         <p class="foot">Задания оригинальные и составлены по официальной структуре HSK 3.0 (汉考国际, 2025). Реальные варианты экзамена закрыты.</p>`
       : `<p class="muted center" style="padding:30px">Для этого уровня экзамен готовится.</p>`}`;
     const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    const rs = document.getElementById("resume");
+    if (rs) rs.onclick = () => { const r = store.get("ex_run", null), e2 = r && examOf(r.lv); if (e2) go(() => examRun(e2, r.secIds, r.full, r)); };
     $app.querySelectorAll(".tab").forEach(b => b.onclick = () => { hubLevel = +b.dataset.l; haptic(); hskHub(); });
     if (!ex) return;
     document.getElementById("full").onclick = () => ask(`Начать полный пробный экзамен ${hsk(hubLevel)}? Время каждой части ограничено, как на экзамене.`, () => go(() => examRun(ex, ex.sections.map(s => s.id), true)));
@@ -783,7 +822,7 @@
   function howSheet(ex) {
     const bg = document.createElement("div"); bg.className = "backdrop";
     bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">${esc(ex.title.split("·")[0])}: как устроен экзамен</h2>
-      ${ex.sections.map(s => `<div class="label" style="margin:16px 0 6px">${SEC_ZH[s.id]} · ${SEC_RU[s.id]} · ${s.minutes} мин</div>
+      ${ex.sections.map(s => `<div class="label" style="margin:16px 0 6px">${secZh(s)} · ${SEC_RU[s.id]} · ${s.minutes} мин</div>
         ${s.parts.map(p => `<div class="small" style="padding:4px 0"><b>${esc(p.title)}</b> — ${esc(p.ru)} <span class="muted">(${p.items.length})</span></div>`).join("")}`).join("")}
       <p class="muted small" style="margin-top:14px">В приложении каждая часть оценивается по шкале 100 баллов. Ориентир: от 60% верных ответов — уровень сдан. Официальные проходные баллы HSK 3.0 пока не опубликованы.
       ${ex.level <= 2 ? "На уровнях 1–2 каждую запись можно прослушать дважды." : "Начиная с 3 уровня каждая запись звучит один раз — как на экзамене."}</p></div>`;
@@ -811,13 +850,17 @@
     if (it.mode === "short") return [it.answer, ...(it.accept || [])].some(a => clean(a) && clean(v) === clean(a));
     return null;
   }
-  function examRun(ex, secIds, full) {
+  function examRun(ex, secIds, full, resume) {
     const secs = ex.sections.filter(s => secIds.includes(s.id));
     const ans = {}, plays = {};
     let si = 0, ui = 0, units = unitsOf(secs[0]), deadline = 0, timer = null, dictOn = !full;
     const maxPlays = ex.level <= 2 ? 2 : 1;
-    cleanup = () => { if (timer) clearInterval(timer); timer = null; stopAudio(); };
-    const startSection = () => { units = unitsOf(secs[si]); ui = 0; deadline = Date.now() + (secs[si].minutes || 20) * 60000; intro(); };
+    busy(true);
+    cleanup = () => { if (timer) clearInterval(timer); timer = null; stopAudio(); busy(false); };
+    // ход экзамена сохраняется на телефоне: если Android выгрузит приложение, можно продолжить с того же места
+    const save = () => store.set("ex_run", { lv: ex.level, secIds, full: !!full, si, ui, ans, plays, dictOn,
+      left: timer ? Math.max(0, deadline - Date.now()) : null, ts: Date.now() });
+    const startSection = () => { units = unitsOf(secs[si]); ui = 0; deadline = Date.now() + (secs[si].minutes || 20) * 60000; save(); intro(); };
     const tick = () => {
       const el = document.getElementById("clock"); if (!el) return;
       const left = Math.max(0, deadline - Date.now()), m = Math.floor(left / 60000), s = Math.floor(left % 60000 / 1000);
@@ -828,13 +871,13 @@
     const nextSection = () => { stopAudio(); if (finished) return; if (si + 1 < secs.length) { si++; startSection(); } else finish(); };
     function intro() {
       const s = secs[si];
-      $app.innerHTML = `<div class="paper" style="margin-top:6vh"><div class="sec-big zh">${SEC_ZH[s.id]}</div><div class="eyebrow">${esc(ex.title.split("·")[0])} · часть ${si + 1} из ${secs.length}</div>
+      $app.innerHTML = `<div class="paper" style="margin-top:6vh"><div class="sec-big zh">${secZh(s)}</div><div class="eyebrow">${esc(ex.title.split("·")[0])} · часть ${si + 1} из ${secs.length}</div>
         <h2 style="margin-top:6px">${SEC_RU[s.id]}</h2><p class="muted" style="margin-top:6px">${secItems(s)} заданий · ${s.minutes} минут</p>
         <div class="note">${s.parts.map(p => `<div class="small" style="margin-top:4px"><b>${esc(p.title)}</b> — ${esc(p.ru)}</div>`).join("")}
         ${s.id === "listening" ? `<div class="small" style="margin-top:10px">🎧 ${maxPlays === 2 ? "Каждую запись можно прослушать два раза." : "Каждая запись звучит один раз, как на экзамене."} Наденьте наушники.</div>` : ""}
         ${s.id === "reading" ? `<div class="small" style="margin-top:10px">📖 Нажмите на любое слово в тексте — увидите перевод и сможете добавить его в повторение${full ? " (в полном экзамене включается кнопкой «Словарь»)" : ""}.</div>` : ""}</div></div>
         <div class="actions"><button class="primary" id="go">Начать — таймер ${s.minutes} мин</button></div>`;
-      document.getElementById("go").onclick = () => { if (timer) clearInterval(timer); deadline = Date.now() + (s.minutes || 20) * 60000; timer = setInterval(tick, 1000); draw(); };
+      document.getElementById("go").onclick = () => { if (timer) clearInterval(timer); deadline = Date.now() + (s.minutes || 20) * 60000; timer = setInterval(tick, 1000); draw(); save(); };
     }
     function audioBtn(key, aid, lines, label) {
       const used = plays[key] || 0, left = maxPlays - used;
@@ -871,18 +914,18 @@
         }
         return h + `</div></div>`;
       };
-      $app.innerHTML = head + `<div class="paper ex-paper"><div class="eyebrow">${SEC_ZH[s.id]} · ${esc(p.title)}</div><div class="small muted" style="margin:4px 0 10px">${esc(p.ru)}</div>
+      $app.innerHTML = head + `<div class="paper ex-paper"><div class="eyebrow">${secZh(s)} · ${esc(p.title)}</div><div class="small muted" style="margin:4px 0 10px">${esc(p.ru)}</div>
         ${groupAudio}${passage}${bank}${u.items.map(itemHtml).join("")}</div>
         <div class="row" style="margin-top:14px;gap:8px">${ui > 0 ? `<button class="secondary" id="prev" style="flex:1">Назад</button>` : ""}
         <button class="primary" id="nextU" style="flex:2">${ui + 1 < units.length ? "Дальше" : si + 1 < secs.length ? "Закончить часть" : "Завершить экзамен"}</button></div>`;
       tick();
       $app.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { haptic(); ans[+b.dataset.n] = +b.dataset.k;
-        $app.querySelectorAll(`[data-n="${b.dataset.n}"][data-k]`).forEach(x => x.classList.toggle("sel", x === b)); });
-      $app.querySelectorAll(".wr").forEach(el => el.oninput = () => { ans[+el.dataset.n] = el.value; const c = $app.querySelector(`[data-c="${el.dataset.n}"]`);
+        $app.querySelectorAll(`[data-n="${b.dataset.n}"][data-k]`).forEach(x => x.classList.toggle("sel", x === b)); save(); });
+      $app.querySelectorAll(".wr").forEach(el => el.oninput = () => { ans[+el.dataset.n] = el.value; save(); const c = $app.querySelector(`[data-c="${el.dataset.n}"]`);
         if (c) { const it = u.items.find(x => x.n === +el.dataset.n); c.textContent = `${hanCount(el.value)} знаков${it && it.min_chars ? ` из ${it.min_chars}` : ""}`; } });
       $app.querySelectorAll("[data-play]").forEach(b => b.onclick = async () => {
         const key = b.dataset.play; if ((plays[key] || 0) >= maxPlays) return toast("Запись уже прослушана");
-        plays[key] = (plays[key] || 0) + 1;
+        plays[key] = (plays[key] || 0) + 1; save();
         const n = +key.slice(1), it = u.items.find(x => x.n === n) || first;
         const left = maxPlays - plays[key]; b.innerHTML = `${icon("sound")}Звучит…`; b.classList.add("dim");
         let played;
@@ -898,20 +941,20 @@
       });
       bindTaps($app);
       const dt = document.getElementById("dt"); if (dt) dt.onclick = () => { dictOn = !dictOn; draw(); };
-      const pv = document.getElementById("prev"); if (pv) pv.onclick = () => { stopAudio(); ui--; draw(); };
+      const pv = document.getElementById("prev"); if (pv) pv.onclick = () => { stopAudio(); ui--; draw(); save(); };
       document.getElementById("nextU").onclick = () => {
         stopAudio();
-        if (ui + 1 < units.length) { ui++; draw(); return; }
+        if (ui + 1 < units.length) { ui++; draw(); save(); return; }
         const empty = units.reduce((n, x) => n + x.items.filter(it => ans[it.n] === undefined || ans[it.n] === "").length, 0);
         const atSection = si;
         ask(empty ? `Без ответа: ${empty}. Закончить эту часть?` : "Закончить эту часть?", () => { if (si !== atSection || finished) return; if (timer) clearInterval(timer); timer = null; nextSection(); });
       };
-      document.getElementById("x").onclick = () => ask("Выйти из экзамена? Ответы не сохранятся.", () => { if (timer) clearInterval(timer); stopAudio(); go(hskHub); });
+      document.getElementById("x").onclick = () => ask("Выйти из экзамена? Ответы не сохранятся.", () => { if (timer) clearInterval(timer); stopAudio(); store.set("ex_run", null); go(hskHub); });
       window.scrollTo(0, 0);
     }
     let result = null;
     function finish() {
-      if (timer) clearInterval(timer); stopAudio(); finished = true;
+      if (timer) clearInterval(timer); stopAudio(); finished = true; busy(false); store.set("ex_run", null);
       if (!result) result = score();
       render(result);
     }
@@ -932,8 +975,9 @@
     }
     function render({ res, wrong, subj, pct }) {
       const [ch, verdict] = pct >= 80 ? ["优", "Отлично — уровень сдан уверенно"] : pct >= 60 ? ["过", "Уровень сдан"] : ["练", "Пока не хватает баллов"];
+      const scaleNote = `<div class="small muted" style="margin-top:8px">Оценка по шкале приложения: от 60% верных — ориентир «сдан». Официальная шкала баллов и проходной балл HSK 3.0 пока не опубликованы.</div>`;
       $app.innerHTML = `<div class="paper" style="margin-top:4vh"><div class="stamp">${ch}</div><div class="eyebrow">${esc(ex.title.split("·")[0])} · ${full ? "полный экзамен" : SEC_RU[secs[0].id]}</div>
-        <h2 style="margin-top:6px">${verdict}</h2><div class="score"><b>${pct}%</b>верных ответов в заданиях с выбором</div>
+        <h2 style="margin-top:6px">${verdict}</h2><div class="score"><b>${pct}%</b>верных ответов в заданиях с выбором</div>${scaleNote}
         <div class="note">${secs.map(s => res[s.id][1] ? `<div class="level-row" style="grid-template-columns:110px 1fr 70px"><b>${SEC_RU[s.id]}</b><div class="line"><i style="width:${Math.round(res[s.id][0] / res[s.id][1] * 100)}%"></i></div><span class="n">${Math.round(res[s.id][0] / res[s.id][1] * 100)} / 100</span></div>` : "").join("")}
         ${subj.length ? `<div class="small" style="margin-top:8px">✍️ ${subj.length} ${plural(subj.length, "письменное задание", "письменных задания", "письменных заданий")} проверит учитель-ИИ — разбор придёт в чат.</div>` : ""}</div></div>
         <div class="list">
@@ -969,7 +1013,7 @@
       const yours = a === undefined || a === "" ? "нет ответа" : p.type === "write" ? a : opt(a);
       const script = it.audio ? it.audio.map(([w, t]) => (w ? w + "：" : "") + t).join("\n") : "";
       $app.innerHTML = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round((k + 1) / list.length * 100)}%"></i></div><span class="step-count">${k + 1}/${list.length}</span></div>
-        <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${SEC_ZH[s.id]} · ${esc(p.title)} · задание ${it.n}</div>
+        <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${secZh(s)} · ${esc(p.title)} · задание ${it.n}</div>
         ${it.passage ? `<div class="passage zh">${tapHtml(it.passage)}</div>` : ""}
         ${script ? `<div class="label" style="margin:10px 0 4px">Расшифровка записи</div><div class="passage zh">${tapHtml(script)}${it.q_audio ? "<br>" + tapHtml(it.q_audio) : ""}</div>` : it.q_audio ? `<div class="passage zh">${tapHtml(it.q_audio)}</div>` : ""}
         ${it.text ? `<div class="ex-text zh">${tapHtml(it.text)}</div>` : ""}${it.q ? `<div class="ex-q zh">${tapHtml(it.q)}</div>` : ""}
@@ -985,6 +1029,13 @@
       document.getElementById("nx").onclick = () => k + 1 < list.length ? review(list, k + 1) : finish();
       document.getElementById("x").onclick = finish;
       document.getElementById("askT").onclick = () => askSheet(`Экзамен ${hsk(ex.level)}, ${SEC_RU[s.id]}, задание ${it.n}. ${it.q_audio || it.q || it.text || ""} Мой ответ: ${yours}. Правильно: ${right}. Почему?`.slice(0, 600));
+    }
+    if (resume && resume.si < secs.length) {
+      si = resume.si; units = unitsOf(secs[si]); ui = Math.min(resume.ui || 0, units.length - 1);
+      Object.assign(ans, resume.ans || {}); Object.assign(plays, resume.plays || {}); dictOn = resume.dictOn !== false;
+      if (resume.left != null) { deadline = Date.now() + Math.max(resume.left, 60000); timer = setInterval(tick, 1000); draw(); } else intro();
+      toast("Продолжаем экзамен с того же места");
+      return;
     }
     startSection();
   }
@@ -1046,11 +1097,13 @@
     try { await loadExams(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить задания<p class="muted small">${esc(e.message)}</p></div>`; return; }
     const levels = EXAMS.hskk.levels; const L = levels[kkLevel] || levels[0];
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
-      <div class="eyebrow">Устный экзамен</div><h2 style="font-size:26px;margin-top:2px">HSKK <span class="serif muted" style="font-weight:500">口语</span></h2>
-      <div class="tabs">${levels.map((l, k) => `<button class="tab ${kkLevel === k ? "on" : ""}" data-l="${k}">${esc(l.name.replace("HSKK ", ""))}</button>`).join("")}</div>
+      <div class="eyebrow">Устный экзамен</div><h2 style="font-size:26px;margin-top:2px">口语 <span class="serif muted" style="font-weight:500">HSK 3.0 и HSKK</span></h2>
+      <div class="tabs">${levels.map((l, k) => `<button class="tab ${kkLevel === k ? "on" : ""}" data-l="${k}">${esc(l.name.replace("HSKK ", "").replace(" 口语", ""))}</button>`).join("")}</div>
       <div class="today-card"><div class="today-top"><div class="glyph zh"><span>说</span></div><div class="grow">
         <div class="eyebrow">${esc(L.name)} · ${esc(L.ru || "")}</div><div class="today-title">${L.sets[0].parts.map(p => `${esc(p.title)} ×${p.items.length}`).join(", ")}</div>
-        <div class="today-meta">${L.total_minutes ? `${L.total_minutes} мин, из них ${L.prep_minutes} мин на подготовку` : ""}${L.id === "hsk79" ? "<br>Устная часть экзамена HSK 7–9" : "<br>100 баллов, сдан от 60"}</div></div></div></div>
+        <div class="today-meta">${L.total_minutes ? `${L.total_minutes} мин, из них ${L.prep_minutes} мин на подготовку` : ""}${L.id === "hsk79" ? "<br>Устная часть экзамена HSK 7–9 (только на компьютере). Пороги уровней официально не опубликованы"
+          : /^k\d$/.test(L.id) ? `<br>Устная часть HSK 3.0: на HSK ${L.id.slice(1)} её сдают вместе с письменной. Шкала баллов официально пока не опубликована`
+          : "<br>Классический HSKK: 100 баллов, сдан от 60"}</div></div></div></div>
       <div class="label">Варианты</div>
       ${L.sets.map((st, si) => `<div class="list">${st.parts.map((p, pi) => `<button class="item" data-s="${si}" data-p="${pi}"><span class="sec-zh zh">${esc(p.title.slice(0, 2))}</span><div class="grow"><div class="t">${esc(st.title)} · ${esc(p.title)}</div><div class="s">${esc(p.ru || KK_TYPE[p.type] || "")} · ${p.items.length} ${plural(p.items.length, "задание", "задания", "заданий")}</div></div>${icon("chev", "i chev")}</button>`).join("")}
         <button class="item" data-all="${si}">${icon("target")}<div class="grow"><div class="t">Пройти ${esc(st.title.toLowerCase())} целиком в чате</div><div class="s">Чина даёт задания по очереди, вы отвечаете голосовыми, она оценивает</div></div>${icon("chev", "i chev")}</button></div>`).join("")}
@@ -1199,6 +1252,7 @@
   // ---------- старт ----------
   if (tg) {
     tg.ready(); tg.expand();
+    try { if (tg.isVersionAtLeast && tg.isVersionAtLeast("7.7")) tg.disableVerticalSwipes(); } catch (e) {}
     document.documentElement.dataset.theme = tg.colorScheme === "dark" ? "dark" : "light";
     const bgc = getComputedStyle(document.documentElement).getPropertyValue("--paper").trim();
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
