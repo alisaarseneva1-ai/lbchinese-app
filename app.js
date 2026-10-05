@@ -162,7 +162,7 @@
     document.querySelectorAll(".backdrop.ask").forEach(x => x.remove());
     const bg = document.createElement("div"); bg.className = "backdrop ask";
     bg.innerHTML = `<div class="sheet"><div class="grab"></div><p style="font-size:17px;line-height:1.45;margin:6px 0 18px">${esc(text)}</p>
-      <div class="row" style="gap:8px"><button class="secondary" data-a="0" style="flex:1">Нет</button><button class="primary" data-a="1" style="flex:1">Да</button></div></div>`;
+      <div class="row" style="gap:8px"><button class="secondary" data-a="0" style="flex:1;margin-right:8px">Нет</button><button class="primary" data-a="1" style="flex:1">Да</button></div></div>`;
     let done = false;
     const close = ok => { if (done) return; done = true; bg.remove(); if (ok) { haptic(); yes(); } };
     bg.addEventListener("click", e => { if (e.target === bg) close(false); });
@@ -175,14 +175,16 @@
     try { on ? tg.enableClosingConfirmation() : tg.disableClosingConfirmation(); } catch (e) {}
   }
   // любая непредвиденная ошибка: не оставляем ученика с «зависшим» экраном и запоминаем её для бота
-  const errs = [];
   function caught(msg, where) {
     const line = String(msg || "ошибка").slice(0, 160) + (where ? " @" + where : "");
-    if (errs.indexOf(line) < 0 && errs.length < 3) errs.push(line);
-    try { store.set("errs", errs); } catch (e) {}
+    try {
+      let errs = store.get("errs", []); if (!Array.isArray(errs)) errs = [];
+      if (errs.indexOf(line) < 0) { errs.push(line); store.set("errs", errs.slice(-3)); }
+    } catch (e) {}
     toast("Что-то пошло не так 🙈 Нажмите кнопку ещё раз — ответы на месте");
   }
-  window.addEventListener("error", ev => caught(ev.message, (ev.filename || "").split("/").pop() + ":" + ev.lineno));
+  window.addEventListener("error", ev => { if (ev.message === "Script error." && !ev.lineno) return;   // чужой скрипт без подробностей
+    caught(ev.message, (ev.filename || "").split("/").pop() + ":" + ev.lineno); });
   window.addEventListener("unhandledrejection", ev => caught(ev.reason && ev.reason.message || ev.reason, "promise"));
   const word = h => P.words.get(h);
 
@@ -199,18 +201,27 @@
   let zhVoice = null;
   function pickVoice() { const vs = speechSynthesis.getVoices(); zhVoice = vs.find(v => /zh[-_]CN/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang)) || null; }
   if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+  // Озвучка — живые нейроголоса (mp3 на GitHub, их создаёт make_audio.py): слова и фразы медленным
+  // голосом учителя, чтобы тоны было хорошо слышно. Голос устройства — только запасной вариант.
+  // id файла = FNV-1a от «голос:текст» — так же, как в export_exams.py
+  function clipId(key) {
+    let h = 0x811c9dc5;
+    const bytes = new TextEncoder().encode(key);
+    for (let i = 0; i < bytes.length; i++) { h ^= bytes[i]; h = Math.imul(h, 0x01000193) >>> 0; }
+    return ("0000000" + h.toString(16)).slice(-8);
+  }
+  const VC = w => w === "男" ? "m" : w === "女" ? "f" : "n";
   function speak(text, quiet) {
-    if (!zhVoice) { if (!quiet) toast("На этом устройстве нет китайского голоса — аудио есть в уроках в чате"); return; }
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.voice = zhVoice; u.lang = zhVoice.lang; u.rate = .8; speechSynthesis.speak(u);
+    text = String(text || "").trim(); if (!text) return;
+    playClip(clipId("w:" + text), [["", text]], quiet ? "" : "Озвучка этого слова ещё не готова");
   }
-  // аудирование: реплики по очереди, мужской голос ниже, женский выше
+  // аудирование в уроке: реплики мужским и женским голосом
   function speakLines(lines) {
-    if (!zhVoice) return;
-    speechSynthesis.cancel();
-    lines.forEach(([who, t]) => { const u = new SpeechSynthesisUtterance(t); u.voice = zhVoice; u.lang = zhVoice.lang; u.rate = .9; u.pitch = who === "男" ? .75 : who === "女" ? 1.2 : 1; speechSynthesis.speak(u); });
+    const key = lines.map(([w, t]) => VC(w) + ":" + t).join("\n");
+    playClip(clipId(key), lines, "Озвучка ещё не готова — прочитайте реплики в разборе");
   }
-  const canAudio = () => !!zhVoice;
+  let audioOk = false;    // есть ли на сайте готовые mp3 (проверяем при запуске)
+  const canAudio = () => audioOk || !!zhVoice;
 
   // ---------- навигация ----------
   let depth = 0;
@@ -235,6 +246,8 @@
     Object.entries(raw.lessons).forEach(([lv, rows]) => rows.forEach(r => { lessons[lv + ":" + r[0]] = { lv: +lv, day: r[0], week: r[1], kind: r[2], topic: r[3], sounds: r[4], grammar: r[5], gex: r[6] || [], gq: r[7] || [] }; }));
     const listening = (raw.listening || []).map(x => ({ lv: x[0], part: x[1], lines: x[2], q: x[3], opts: x[4], py: x[5], ans: x[6], ru: x[7] }));
     P = { words, lessons, sizes: raw.sizes, listening };
+    // готовы ли mp3: проверяем один файл, не задерживая запуск
+    fetch(`audio/${clipId("w:你好")}.mp3`, { method: "HEAD" }).then(r => { audioOk = r.ok; }).catch(() => {});
   }
   const lesson = (lv, d) => P.lessons[lv + ":" + d];
   const lessonWords = (lv, d) => (byLevel[lv] || []).filter(w => w.day === d);
@@ -376,7 +389,7 @@
         <button class="tile t-rose" id="hskP"><span class="hz">考</span><span class="ic">${icon("exam")}</span>
           <span><b>Подготовка к HSK</b><small>Пробные экзамены 3.0</small></span></button>
         <button class="tile t-navy" id="hskkP"><span class="hz">说</span><span class="ic">${icon("mic")}</span>
-          <span><b>Подготовка к HSKK</b><small>Устный экзамен</small></span></button>
+          <span><b>Устный экзамен</b><small>HSK 口语 и HSKK</small></span></button>
       </div>
 
       <button class="wide" id="lifeW" style="background:var(--navy);color:#fff"><span class="round" style="background:rgba(255,255,255,.14)">${icon("globe")}</span><span class="grow"><span class="t">Китайский для жизни</span><br><span class="s" style="color:rgba(255,255,255,.7)">Китай, работа, бизнес, для себя — ролевые игры</span></span>${icon("chev", "i chev")}</button>
@@ -758,11 +771,11 @@
   // ---------- аудио экзамена: mp3 с GitHub, если нет — голос устройства ----------
   let curAudio = null;
   function stopAudio() { try { if (curAudio) { curAudio.pause(); curAudio = null; } speechSynthesis && speechSynthesis.cancel(); } catch (e) {} }
-  function playClip(aid, lines) {
+  function playClip(aid, lines, noVoiceMsg) {
     return new Promise(res => {
       stopAudio();
       const fallback = () => {
-        if (!zhVoice) { toast("Нет китайского голоса на устройстве — откройте расшифровку"); return res(false); }
+        if (!zhVoice) { const m = noVoiceMsg === undefined ? "Нет китайского голоса на устройстве — откройте расшифровку" : noVoiceMsg; if (m) toast(m); return res(false); }
         speechSynthesis.cancel();
         lines.forEach(([who, t], k) => { const u = new SpeechSynthesisUtterance(t); u.voice = zhVoice; u.lang = zhVoice.lang; u.rate = .9;
           u.pitch = who === "男" ? .75 : who === "女" ? 1.2 : 1; if (k === lines.length - 1) u.onend = () => res(true); speechSynthesis.speak(u); });
