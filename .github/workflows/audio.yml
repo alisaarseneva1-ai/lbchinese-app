@@ -1,25 +1,27 @@
-   # Озвучка экзаменов: при загрузке нового audio_clips.json GitHub сам создаёт mp3 в папке audio/
-   name: Озвучка экзаменов
-   on:
-     push:
-       paths: ["audio_clips.json", "make_audio.py"]
-     workflow_dispatch:
-   permissions:
-     contents: write
-   jobs:
-     audio:
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v4
-         - uses: actions/setup-python@v5
-           with:
-             python-version: "3.11"
-         - run: sudo apt-get install -y -qq ffmpeg && pip install -q edge-tts
-         - run: python make_audio.py
-         - name: Сохранить mp3
-           run: |
-             git config user.name "audio-bot"
-             git config user.email "audio-bot@users.noreply.github.com"
-             git add audio
-             git diff --cached --quiet || git commit -m "Озвучка экзаменов"
-             git push
+# Озвучка приложения: при загрузке нового audio_clips.json GitHub сам создаёт mp3 в папке audio/.
+# Первый запуск после большого обновления может идти 1–3 часа; готовые файлы сохраняются по ходу работы.
+name: Озвучка экзаменов
+on:
+  push:
+    paths: ["audio_clips.json", "make_audio.py"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: audio
+  cancel-in-progress: false
+jobs:
+  audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sudo apt-get install -y -qq ffmpeg && pip install -q edge-tts
+      - name: Озвучить недостающие фразы
+        run: |
+          git config user.name "audio-bot"
+          git config user.email "audio-bot@users.noreply.github.com"
+          python make_audio.py
