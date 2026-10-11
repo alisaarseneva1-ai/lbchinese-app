@@ -281,7 +281,11 @@
     build: w => { const t = (w.seg || "").split(" ").filter(x => x && !PUNCT.has(x)); if (t.length < 3 || t.length > 8) return null;
       let sh = t.slice(); for (let k = 0; k < 5 && sh.join() === t.join(); k++) shuffle(sh);
       return { kind: "build", eyebrow: "Соберите фразу", ru: w.ext, tokens: sh, answer: t, w, explain: `${w.ex} — ${w.exp}` }; },
-    grammar: (rule, sent, o, k, key) => { const right = o[k], oo = shuffle(o.slice()); return { kind: "grammar", eyebrow: "Правило: " + rule, zh: sent, zhOpts: 1, opts: oo, correct: oo.indexOf(right), explain: sent.replace("＿＿", right), gkey: key }; },
+    grammar: (rule, sent, o, k, ex, pw, key) => {
+      // pw — слово для задания «выберите место» (метки A–D, как в HSK); пусто — «вставьте пропущенное»
+      if (key === undefined && typeof pw !== "string") { key = ex; ex = ""; pw = ""; }
+      if (pw) return { kind: "grammar", eyebrow: "Правило: " + rule, zh: sent, ru: "Куда поставить «" + pw + "»? Выберите место.", opts: o.slice(), correct: k, explain: ex, gkey: key, place: pw };
+      const right = o[k], oo = shuffle(o.slice()); return { kind: "grammar", eyebrow: "Правило: " + rule, zh: sent, zhOpts: 1, opts: oo, correct: oo.indexOf(right), explain: ex || sent.replace("＿＿", right), gkey: key }; },
     audio: a => canAudio() ? { kind: "audio", eyebrow: "Аудирование · " + a.part, lines: a.lines, ru: a.q, zhOpts: 1, opts: a.py && a.py.length === a.opts.length ? a.opts.map((o, i) => o + " " + a.py[i]) : a.opts.slice(), correct: a.ans,
       explain: a.lines.map(([s, t]) => (s ? s + "：" : "") + t).join("\n") + "\n\n" + a.ru } : null,
   };
@@ -297,14 +301,14 @@
     if (["reverse", "listen", "gap"].includes(q.kind)) { const o = word(chosen); if (o) return `${o.h} (${o.p}) значит «${o.m}» — здесь не подходит.`; }
     if (q.kind === "pinyin" && w) { const r = w.p.split("/")[0].trim(); return `Тоны ${w.h}: ${TONE_N(r)} (${r}), а вы выбрали ${TONE_N(chosen)}. Проговорите вслух, показывая рукой движение тона.`; }
     if (q.kind === "translate") { const o = [...P.words.values()].find(x => x.ex === chosen); if (o && o.ext) return `«${chosen}» значит «${o.ext}».`; }
-    if (q.kind === "grammar") { const o = word(chosen); if (o) return `«${chosen}» — ${o.m}, здесь не подходит.`; }
+    if (q.kind === "grammar" && !q.place) { const o = word(chosen); if (o) return `«${chosen}» — ${o.m}, здесь не подходит.`; }
     return "";
   }
   function similar(q) {
     const w = q.w;
     if (w) { for (const k of shuffle(["meaning", "reverse", "pinyin", "gap", "listen"].filter(k => k !== q.kind))) { const x = k === "gap" ? EX.gap(w) : EX[k](w); if (x) return x; } }
     if (q.kind === "grammar" && q.gkey) { const [lv, d] = q.gkey.split("-").map(Number), l = lesson(lv, d);
-      if (l && l.gq.length) { const pool = l.gq.filter(g => g[0] !== q.zh); const g = (pool.length ? pool : l.gq)[Math.floor(Math.random() * (pool.length || l.gq.length))]; return EX.grammar(l.topic, ...g, q.gkey); } }
+      if (l && l.gq.length) { let pool = l.gq.filter(g => g[0] !== q.zh && !!g[4] === !!q.place); if (!pool.length) pool = l.gq.filter(g => g[0] !== q.zh); const g = (pool.length ? pool : l.gq)[Math.floor(Math.random() * (pool.length || l.gq.length))]; return EX.grammar(l.topic, ...g, q.gkey); } }
     return null;
   }
   function weakSet(keys) {
@@ -323,7 +327,8 @@
     sh.slice(0, 2).forEach(w => { const x = EX.translate(w, ws); if (x) out.push(x); });
     sh.slice(2, 6).map(EX.build).filter(Boolean).slice(0, 2).forEach(x => out.push(x));
     shuffle(out);
-    return l.gq.map(q => EX.grammar(l.topic, ...q, l.lv + "-" + l.day)).concat(out);
+    const gap = shuffle(l.gq.filter(q => !q[4])).slice(0, 3), pos = shuffle(l.gq.filter(q => q[4])).slice(0, 2);
+    return gap.concat(pos).map(q => EX.grammar(l.topic, ...q, l.lv + "-" + l.day)).concat(out);
   }
   function testSet(ws, gram, aud, nw = 10, ng = 3, na = 2) {
     const mk = [EX.meaning, EX.reverse, EX.pinyin, w => EX.gap(w, ws)], out = [];
@@ -450,7 +455,7 @@
         <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Выбрать уровень самому</div><div class="s">Сейчас ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов и фраз</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="fbk">${icon("ask")}<div class="grow"><div class="t">Оставить отзыв</div><div class="s">Видит только команда LinguaBridge</div></div>${icon("chev", "i chev")}</button>
-        <div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">${S.ok ? (S.a ? "до " + fmtDate(S.a) : "активен") : "закончился"}</div></div>${S.ok ? "" : `<button class="secondary" id="pay" style="width:auto;padding:10px 16px">Оформить</button>`}</div>
+        <div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">${S.f ? "бесплатно, без ограничений" : S.ok ? (S.a ? "до " + fmtDate(S.a) : "активен") : "закончился"}</div></div>${S.ok ? "" : `<button class="secondary" id="pay" style="width:auto;padding:10px 16px">Оформить</button>`}</div>
       </div>`;
     navBar("prof");
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
