@@ -8,8 +8,25 @@
   const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData !== undefined
     ? window.Telegram.WebApp : null;
   const $app = document.getElementById("app");
-  const LEVELS = [1, 2, 3, 4, 5, 6, 7];
-  const hsk = lv => lv >= 7 ? "HSK 7–9" : "HSK " + lv;
+  const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const hsk = lv => "HSK " + lv;
+  // экзамен: для учебных уровней 7, 8, 9 он один — HSK 7–9 (в exams.json он хранится под уровнем 7)
+  const EXAM_LEVELS = [1, 2, 3, 4, 5, 6, 7];
+  const examLv = lv => Math.min(Math.max(lv || 1, 1), 7);
+  const examName = lv => lv >= 7 ? "HSK 7–9" : "HSK " + lv;
+  // «Важно знать»: официально 7, 8 и 9 — один общий блок 七—九级, деление курса — учебное
+  const SRC79 = [["新版HSK考试大纲 (2025)", "https://hsk.cn-bj.ufileos.com/3.0/%E6%96%B0%E7%89%88HSK%E8%80%83%E8%AF%95%E5%A4%A7%E7%BA%B21219.pdf"],
+    ["chinesetest.cn · HSK 7–9", "https://www.chinesetest.cn/HSK/7-9"],
+    ["HSK3.0考试能力描述", "https://hsk.cn-bj.ufileos.com/3.0/HSK3.0%E8%80%83%E8%AF%95%E8%83%BD%E5%8A%9B%E6%8F%8F%E8%BF%B0.pdf"]];
+  const note79 = (short) => `<div class="facts" id="note79"><b>Важно знать</b>
+    <p>Официально уровни 7, 8 и 9 — это один общий блок «七—九级»: словарь (5 600 слов), иероглифы, грамматика, темы и задачи у них общие, отдельных списков для HSK 7, 8 и 9 не существует (新版HSK考试大纲, 2025).${short ? "" : ` Экзамен тоже один: HSK 7–9, 98 заданий, около 210 минут, только на компьютере. По его баллам присваивают «ниже 7», 7, 8 или 9 уровень; пороговые баллы официально не опубликованы (chinesetest.cn).`}</p>
+    ${short ? "" : `<p>Отдельно для каждого уровня есть только короткое описание умений: 7 — общаться нормативно и свободно на работе и в учёбе; 8 — уместно и глубоко; 9 — точно и глубоко в любых профессиональных и академических ситуациях.</p>`}
+    <p>Деление нашего курса на HSK 7, 8 и 9 — учебное (LinguaBridge): официальные слова и грамматику 7–9 мы распределили по трём этапам — от более частых слов и книжной грамматики (7) через риторику и официальный стиль (8) к чэнъюям, поговоркам и стилистике (9).</p>
+    <p class="src">Источники: ${SRC79.map(([t, u]) => `<a href="${u}" data-ext="${u}">${t}</a>`).join(" · ")}</p></div>`;
+  // ссылки в Telegram открываем через openLink, иначе мини-приложение закроется
+  const bindLinks = root => (root || document).querySelectorAll("a[data-ext]").forEach(a => a.onclick = e => {
+    e.preventDefault(); e.stopPropagation(); const u = a.dataset.ext;
+    if (tg && tg.openLink) tg.openLink(u); else window.open(u, "_blank", "noopener"); });
 
   // ---------- иконки ----------
   const I = {
@@ -360,8 +377,9 @@
     const line = chinaLine(due);
     const glyph = l && l.kind === "урок" && ws[0] ? ws[0].h[0] : l && l.kind === "тест" ? "考" : "学";
     let title = "", meta = "", cta = "";
-    if (!l) { title = "Программа пройдена"; meta = "Вы дошли до конца HSK 7–9 — повторяйте и готовьтесь к экзамену"; }
+    if (!l) { title = "Программа пройдена"; meta = "Вы дошли до конца HSK 9 — повторяйте и готовьтесь к экзамену HSK 7–9"; }
     else if (l.kind === "урок") { title = l.topic; meta = `${ws.length} ${plural(ws.length, "новое слово", "новых слова", "новых слов")}${l.grammar ? " и правило" : ""}, около ${Math.max(10, ws.length * 2)} минут`; cta = S.done ? "Следующий урок" : "Начать урок"; }
+    else if (l.kind === "тест" && l.topic.startsWith("Пробный экзамен")) { title = "Итоговый тест уровня"; meta = `Слова, грамматика и аудирование за весь ${hsk(l.lv)}`; cta = "Пройти тест"; }
     else if (l.kind === "тест") { title = "Тест недели"; meta = "Слова, грамматика и аудирование за неделю"; cta = "Пройти тест"; }
     else { title = "День отдыха"; meta = "Можно повторить слова или поболтать с Чиной"; cta = "Отметить день"; }
     const k = known(S.l), sz = size(S.l), pct = Math.min(1, k / sz);
@@ -434,22 +452,22 @@
         <button class="tile t-sky" id="wr" style="min-height:120px"><span class="hz" style="font-size:80px">写</span><span class="ic">${icon("book")}</span>
           <span><b style="font-size:18px">Письмо и сочинение</b><small>Пишете — учитель проверяет по критериям экзамена</small></span></button>
       </div>
-      ${last.length ? `<div class="pcard"><div class="label" style="margin:0 0 8px">Последние результаты</div>${last.map(x => `<div class="level-row" style="grid-template-columns:1fr auto"><span class="small">${hsk(x.lv)} · ${esc(x.what)} · ${esc(x.d)}</span><b>${x.pct}%</b></div>`).join("")}</div>` : ""}`;
+      ${last.length ? `<div class="pcard"><div class="label" style="margin:0 0 8px">Последние результаты</div>${last.map(x => `<div class="level-row" style="grid-template-columns:1fr auto"><span class="small">${examName(x.lv)} · ${esc(x.what)} · ${esc(x.d)}</span><b>${x.pct}%</b></div>`).join("")}</div>` : ""}`;
     navBar("exams");
     const need = fn => () => S.ok ? fn() : toast("Нужна подписка");
     document.getElementById("hskP").onclick = need(() => go(hskHub));
     document.getElementById("hskkP").onclick = need(() => go(hskkHub));
-    document.getElementById("wr").onclick = need(async () => { await loadExams(); const ex = examOf(Math.min(Math.max(S.l || 1, 1), 7)); go(() => writingHub(ex)); });
+    document.getElementById("wr").onclick = need(async () => { await loadExams(); const ex = examOf(examLv(S.l)); go(() => writingHub(ex)); });
   }
 
   // ---------- вкладка «Профиль» ----------
   function profileTab() {
-    const cols = LEVELS.map(lv => { const p = Math.min(1, known(lv) / size(lv)); return `<div class="lv-col ${lv === S.l ? "cur" : ""}"><i><u style="height:${Math.max(4, Math.round(p * 100))}%"></u></i><small>${lv >= 7 ? "7–9" : lv}</small></div>`; }).join("");
+    const cols = LEVELS.map(lv => { const p = Math.min(1, known(lv) / size(lv)); return `<div class="lv-col ${lv === S.l ? "cur" : ""}"><i><u style="height:${Math.max(4, Math.round(p * 100))}%"></u></i><small>${lv}</small></div>`; }).join("");
     const total = LEVELS.reduce((n, lv) => n + known(lv), 0);
     $app.innerHTML = `<div class="top"><span class="me" style="width:64px;height:64px">${chinaSVG("love")}</span><div class="grow"><div class="name" style="font-size:22px">${esc(S.n)}</div><div class="hi">Сейчас ${hsk(S.l)} · ${S.s} ${plural(S.s, "день", "дня", "дней")} подряд</div></div></div>
       <div class="pcard"><div class="row"><div class="grow"><div class="label" style="margin:0">Выучено слов</div><div class="title-big" style="margin:4px 0 0;font-size:34px">${total.toLocaleString("ru-RU")}</div></div>
         <div class="ring">${ringSvg(Math.min(1, known(S.l) / size(S.l)), "var(--bord)", "var(--sky2)")}<b>${Math.round(Math.min(1, known(S.l) / size(S.l)) * 100)}%</b></div></div>
-        <div class="lv-grid">${cols}</div><p class="small muted" style="margin-top:8px">Столбики — доля слов каждого уровня в ваших карточках. Красный — ваш уровень.</p></div>
+        <div class="lv-grid">${cols}</div><p class="small muted" style="margin-top:8px">Столбики — доля слов каждого уровня в ваших карточках. Красный — ваш уровень. 7, 8, 9 — учебное деление общего официального уровня 7–9.</p></div>
       <div class="list" style="margin-top:14px">
         <button class="item" id="lvl">${icon("target")}<div class="grow"><div class="t">Тест на уровень</div><div class="s">Слова, грамматика и аудирование, 10–20 минут</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Выбрать уровень самому</div><div class="s">Сейчас ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
@@ -470,10 +488,14 @@
   function levelSheet() {
     const bg = document.createElement("div"); bg.className = "backdrop";
     const INFO = { 1: "300 слов, простые фразы", 2: "500 слов, бытовые диалоги", 3: "1000 слов, 把 и 被", 4: "2000 слов, связные тексты",
-      5: "3600 слов, новости и статьи", 6: "5400 слов, публицистика", 7: "11 000 слов, академический язык" };
+      5: "3600 слов, новости и статьи", 6: "5400 слов, публицистика",
+      7: `${size(7)} слов: частые слова 7–9, книжная грамматика · учебный этап`, 8: `${size(8)} слов: риторика, официальный стиль · учебный этап`,
+      9: `${size(9)} слов: чэнъюи, поговорки, стилистика · учебный этап` };
     bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">Выбрать уровень</h2>
       <p class="muted small" style="margin-top:4px">Урок начнётся с первой недели уровня. Выученные слова и повторения сохранятся.</p>
-      <div class="list" style="margin-top:14px">${LEVELS.map(lv => `<button class="item" data-lv="${lv}"><b style="width:78px;white-space:nowrap">${hsk(lv)}</b><div class="grow s">${INFO[lv]}</div>${lv === S.l ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div></div>`;
+      <div class="list" style="margin-top:14px">${LEVELS.map(lv => `<button class="item" data-lv="${lv}"><b style="width:78px;white-space:nowrap">${hsk(lv)}</b><div class="grow s">${INFO[lv]}</div>${lv === S.l ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div>
+      <p class="muted small" style="margin-top:10px">До HSK 9 всего 11 000 слов; официальный блок 7–9 — 5 600 слов.</p>${note79()}</div>`;
+    bindLinks(bg);
     bg.querySelectorAll("[data-lv]").forEach(b => b.onclick = e => { e.stopPropagation(); const lv = +b.dataset.lv; haptic();
       ask(`Начать ${hsk(lv)} с первой недели?`, () => send({ t: "setlevel", l: lv })); });
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
@@ -635,7 +657,9 @@
       <h2 style="font-size:24px;margin-bottom:12px">Словарь</h2>
       <label class="search">${icon("search")}<input id="q" placeholder="Иероглиф, пиньинь или перевод" value="${esc(dictQuery)}" autocomplete="off"></label>
       <div class="tabs">${[0, ...LEVELS].map(l => `<button class="tab ${dictLevel === l ? "on" : ""}" data-l="${l}">${l ? hsk(l) : "Все"}</button>`).join("")}</div>
+      ${dictLevel >= 7 ? note79(true) : ""}
       <div id="list"></div>`;
+    bindLinks($app);
     const bk = document.getElementById("bk"); if (bk) bk.remove();
     navBar("dict");
     const input = document.getElementById("q");
@@ -803,14 +827,15 @@
   async function hskHub() {
     $app.innerHTML = `<div class="paper"><div class="eyebrow">Загружаю экзамены…</div></div>`;
     try { await loadExams(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить экзамены<p class="muted small">${esc(e.message)}</p></div>`; return; }
-    if (!hubLevel) hubLevel = Math.min(Math.max(S.l || 1, 1), 7);
+    if (!hubLevel) hubLevel = examLv(S.l);
     const ex = examOf(hubLevel), hist = store.get("ex_hist", {})[hubLevel] || [];
     let run = store.get("ex_run", null);
     if (run && (!run.ts || Date.now() - run.ts > 12 * 3600000)) { store.set("ex_run", null); run = null; }
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <div class="eyebrow">Подготовка к экзамену</div><h2 style="font-size:26px;margin-top:2px">HSK 3.0</h2>
-      <div class="tabs">${LEVELS.map(l => `<button class="tab ${hubLevel === l ? "on" : ""}" data-l="${l}">${hsk(l)}</button>`).join("")}</div>
-      ${run && examOf(run.lv) ? `<button class="primary" id="resume" style="margin:12px 0 4px">Продолжить незаконченный экзамен ${hsk(run.lv)}</button>` : ""}
+      <div class="tabs">${EXAM_LEVELS.map(l => `<button class="tab ${hubLevel === l ? "on" : ""}" data-l="${l}">${examName(l)}</button>`).join("")}</div>
+      ${run && examOf(run.lv) ? `<button class="primary" id="resume" style="margin:12px 0 4px">Продолжить незаконченный экзамен ${examName(run.lv)}</button>` : ""}
+      ${hubLevel >= 7 ? `<p class="small muted" style="margin:8px 0 0">HSK 7–9 — один экзамен на три уровня: 7, 8 или 9 присваивают по его баллам.${S.l >= 7 ? ` Для вашего ${hsk(S.l)} — этот же экзамен.` : ""}</p>${note79()}` : ""}
       ${ex ? `<div class="today-card"><div class="today-top"><div class="glyph zh"><span>考</span></div><div class="grow">
           <div class="eyebrow">Пробный экзамен · ${ex.count} заданий</div><div class="today-title">${esc(ex.title)}</div>
           <div class="today-meta">${ex.sections.map(s => `${SEC_RU[s.id]} ${secItems(s)} · ${s.minutes} мин`).join("<br>")}</div></div></div>
@@ -827,11 +852,12 @@
         <p class="foot">Задания оригинальные и составлены по официальной структуре HSK 3.0 (汉考国际, 2025). Реальные варианты экзамена закрыты.</p>`
       : `<p class="muted center" style="padding:30px">Для этого уровня экзамен готовится.</p>`}`;
     const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    bindLinks($app);
     const rs = document.getElementById("resume");
     if (rs) rs.onclick = () => { const r = store.get("ex_run", null), e2 = r && examOf(r.lv); if (e2) go(() => examRun(e2, r.secIds, r.full, r)); };
     $app.querySelectorAll(".tab").forEach(b => b.onclick = () => { hubLevel = +b.dataset.l; haptic(); hskHub(); });
     if (!ex) return;
-    document.getElementById("full").onclick = () => ask(`Начать полный пробный экзамен ${hsk(hubLevel)}? Время каждой части ограничено, как на экзамене.`, () => go(() => examRun(ex, ex.sections.map(s => s.id), true)));
+    document.getElementById("full").onclick = () => ask(`Начать полный пробный экзамен ${examName(hubLevel)}? Время каждой части ограничено, как на экзамене.`, () => go(() => examRun(ex, ex.sections.map(s => s.id), true)));
     $app.querySelectorAll("[data-sec]").forEach(b => b.onclick = () => go(() => examRun(ex, [b.dataset.sec], false)));
     document.getElementById("how").onclick = () => howSheet(ex);
     document.getElementById("myd").onclick = () => go(myDictionary);
@@ -1046,7 +1072,7 @@
       const pv = document.getElementById("pv"); if (pv) pv.onclick = () => review(list, k - 1);
       document.getElementById("nx").onclick = () => k + 1 < list.length ? review(list, k + 1) : finish();
       document.getElementById("x").onclick = finish;
-      document.getElementById("askT").onclick = () => askSheet(`Экзамен ${hsk(ex.level)}, ${SEC_RU[s.id]}, задание ${it.n}. ${it.q_audio || it.q || it.text || ""} Мой ответ: ${yours}. Правильно: ${right}. Почему?`.slice(0, 600));
+      document.getElementById("askT").onclick = () => askSheet(`Экзамен ${examName(ex.level)}, ${SEC_RU[s.id]}, задание ${it.n}. ${it.q_audio || it.q || it.text || ""} Мой ответ: ${yours}. Правильно: ${right}. Почему?`.slice(0, 600));
     }
     if (resume && resume.si < secs.length) {
       si = resume.si; units = unitsOf(secs[si]); ui = Math.min(resume.ui || 0, units.length - 1);
@@ -1063,7 +1089,7 @@
     const tasks = [];
     ex.sections.forEach(s => s.parts.forEach(p => p.items.forEach(it => { if (p.type === "write" && !isObjective(it)) tasks.push({ it, p }); })));
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
-      <div class="eyebrow">${hsk(ex.level)} · письменная часть</div><h2 style="font-size:24px;margin-top:2px">Тренажёр письма</h2>
+      <div class="eyebrow">${examName(ex.level)} · письменная часть</div><h2 style="font-size:24px;margin-top:2px">Тренажёр письма</h2>
       <p class="muted small" style="margin-top:6px">Напишите ответ — учитель-ИИ проверит его по критериям экзамена: выполнение задания, грамматика, лексика, связность, иероглифы. Оценка и исправленный текст придут в чат.</p>
       <div class="list">${tasks.map((t, k) => `<button class="item" data-k="${k}"><span class="sec-zh zh">${t.it.mode === "essay" ? "文" : t.it.mode === "translate" ? "译" : "句"}</span><div class="grow"><div class="t zh" style="font-weight:500">${esc((t.it.text || "").slice(0, 60))}${(t.it.text || "").length > 60 ? "…" : ""}</div><div class="s">${esc(t.p.title)}${t.it.min_chars ? ` · от ${t.it.min_chars} знаков` : ""}${t.it.word ? ` · слово ${esc(t.it.word)}` : ""}</div></div>${icon("chev", "i chev")}</button>`).join("") || `<p class="muted center" style="padding:24px">На этом уровне в экзамене нет письменных заданий со свободным ответом.</p>`}
         <button class="item" id="own">${icon("book")}<div class="grow"><div class="t">Своя тема</div><div class="s">Любой текст на китайском — проверка и исправление</div></div>${icon("chev", "i chev")}</button></div>`;
@@ -1074,7 +1100,7 @@
   function writeTask(ex, it) {
     const key = `draft_${ex.level}_${it.n}`;
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
-      <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${hsk(ex.level)} · ${it.mode === "essay" ? "сочинение" : it.mode === "translate" ? "перевод" : "предложение"}</div>
+      <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${examName(ex.level)} · ${it.mode === "essay" ? "сочинение" : it.mode === "translate" ? "перевод" : "предложение"}</div>
       ${it.pic ? `<div class="pic">${esc(it.pic)}</div>` : ""}${it.pics ? `<div class="pics">${it.pics.map(x => `<div class="pic">${esc(x)}</div>`).join("")}</div>` : ""}
       <div class="ex-text ${HAN.test(it.text || "") ? "zh" : ""}">${HAN.test(it.text || "") ? tapHtml(it.text) : esc(it.text)}</div>
       ${it.word ? `<div class="small muted">Используйте слово: <b class="zh">${esc(it.word)}</b></div>` : ""}
@@ -1221,6 +1247,10 @@
         <div class="pcard" style="margin-top:0"><button class="sound" id="dlg" style="margin-top:0">${icon("sound")}Прослушать диалог целиком</button>
           ${tp.dialogue.map((d, i) => `<div class="dl ${d.who === "女" ? "f" : "m"}"><button class="sound-mini" data-dl="${i}">${icon("sound")}</button><div class="grow"><div class="zh">${d.who ? `<b>${esc(d.who)}：</b>` : ""}${tapHtml(d.zh)}</div><div class="py-s">${esc(d.py || "")}</div><div class="small muted">${esc(d.ru)}</div></div></div>`).join("")}</div>
 
+        ${tp.tips && tp.tips.length ? `<div class="label">Советы для выживания</div>
+        ${tp.tips.map(t => `<div class="pcard" style="margin-top:8px"><div style="font-weight:600">${esc(t.h)}</div><div style="margin-top:4px;color:var(--ink2)">${esc(t.t)}</div>${t.src ? `<div class="small muted" style="margin-top:6px"><a href="${esc(t.src)}" data-ext="${esc(t.src)}">Источник</a></div>` : ""}</div>`).join("")}
+        <div class="small muted" style="margin-top:6px">Проверено по официальным источникам на октябрь 2026. Правила меняются — перед поездкой загляните по ссылкам.</div>` : ""}
+
         <div class="label">Полезно знать</div>
         <div class="pcard t-cream" style="margin-top:0;background:var(--cream)">${esc(tp.culture)}</div>
 
@@ -1231,7 +1261,7 @@
           ${quizState[qi] !== undefined ? `<div class="explain">${quizState[qi] === q.answer ? "✅ " : "💡 "}${esc(q.explain)}</div>` : ""}</div>`).join("")}
         <div class="actions"><button class="primary" id="role2">🎭 Ролевая игра с Чиной</button></div>`;
       const bk = document.getElementById("bk"); if (bk) bk.onclick = () => go(() => lifeTrack(tid));
-      bindTaps($app);
+      bindTaps($app); bindLinks($app);
       $app.querySelectorAll("[data-ph]").forEach(b => b.onclick = () => { const p = tp.phrases[+b.dataset.ph]; playClip(p.aid, [["", p.zh]]); });
       $app.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => { const d = tp.dialogue[+b.dataset.dl]; playClip(d.aid, [[d.who || "", d.zh]]); });
       document.getElementById("dlg").onclick = () => playClip(tp.dlg_aid, tp.dialogue.map(d => [d.who || "", d.zh]));
