@@ -196,6 +196,26 @@ svg.china.pet .ch-tilt{transform:rotate(-6deg)!important}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;justify-content:center}
 .chip{padding:10px 14px;border:1px solid var(--rule);border-radius:12px;background:var(--sheet);font-size:20px}
 .chip.used{opacity:.25}
+/* пиньинь, скрытый по настройке: серая плашка, раскрывается по нажатию */
+.pyh .pyt{display:none}
+.pyh.open .pyt{display:inline}.pyh.open .pyl{display:none}
+.pyh:not(.open){display:inline-block;width:auto;margin-left:auto;margin-right:auto;padding:2px 10px;border-radius:999px;background:var(--paper2);border:1px dashed var(--rule);color:var(--muted);font-size:12px;font-weight:500;line-height:1.6;cursor:pointer;vertical-align:middle;letter-spacing:.2px}
+.py-in{color:var(--seal)}
+.py-ic{width:22px;height:22px;display:grid;place-items:center;font-family:"Noto Sans SC",sans-serif;font-size:16px;font-weight:700;color:var(--ink2);flex:none}
+/* ввод с клавиатуры */
+.kbd{margin-top:12px}
+.kbd[hidden],#btns[hidden]{display:none}
+.kbd .wr{width:100%;font-size:20px;padding:14px 16px;border:1px solid var(--rule);border-radius:14px;background:var(--sheet);color:var(--ink);outline:0}
+.kbd .wr:focus{border-color:var(--ink2)}
+.kbd-t{display:block;margin:12px auto 0;padding:8px 14px;border-radius:999px;border:1px solid var(--rule);font-size:14px;color:var(--ink2);background:var(--sheet)}
+/* «Текст на слух» */
+.cz-text{margin-top:14px;display:grid;gap:10px}
+.cz-s{font-size:20px;line-height:1.7}
+.cz-gap{display:inline-block;min-width:3.4em;padding:0 6px;margin:0 2px;border-bottom:2px solid var(--muted);color:var(--muted);text-align:center}
+.cz-gap.on{color:var(--ink);border-color:var(--ink);font-weight:600}
+.cz-gap.ok{color:var(--jade);border-color:var(--jade);font-weight:600;background:var(--jade-soft);border-radius:6px 6px 0 0}
+.cz-gap.bad{color:var(--seal);border-color:var(--seal);font-weight:600;background:var(--seal-soft);border-radius:6px 6px 0 0}
+.sound.dim{opacity:.55}
 .primary:disabled{opacity:.4}
 .center{text-align:center}
 .backlink{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:14px;margin-bottom:10px}
