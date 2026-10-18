@@ -545,6 +545,25 @@ svg.china.ch-rise.ch-tilt{animation:ch-rise .45s cubic-bezier(.2,1.2,.4,1) both,
   *,*:before,*:after{animation:none!important;transition:none!important}
   .confetti{display:none}
 }
+/* мотивация: миска Чины, «сохрани серию», значки, приглашения */
+.feed{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.feed .chip-f{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:var(--sheet);font-size:13px;font-weight:600;color:var(--ink2)}
+.feed .chip-f.on{background:var(--jade-soft);color:var(--jade)}
+.feed button.chip-f{border:1px dashed var(--seal);color:var(--seal);background:transparent}
+.save-streak{margin-top:16px;display:flex;align-items:center;gap:12px;padding:14px 14px 14px 12px;border-radius:24px;background:var(--seal-soft);border:1.5px solid var(--seal)}
+.save-streak .fire{width:48px;height:48px;flex:none;border-radius:50%;background:var(--seal);color:#fff;display:grid;place-items:center;font-size:22px}
+.save-streak b{display:block;font-size:17px;line-height:1.2}
+.save-streak small{display:block;font-size:13px;color:var(--ink2);margin-top:2px;line-height:1.3}
+.save-streak .go-s{flex:none;border-radius:999px;background:var(--seal);color:#fff;padding:10px 14px;font-weight:700;font-size:14px}
+.mstats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.mstats div{background:var(--paper);border-radius:18px;padding:10px 4px}
+.mstats b{display:block;font-family:var(--head);font-size:22px;font-weight:600}
+.mstats small{font-size:12px;color:var(--muted)}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.badges span{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:var(--jade-soft);color:var(--jade);font-size:12px;font-weight:700}
+.badges span.off{background:var(--paper);color:var(--muted);font-weight:600;opacity:.75}
+.share-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.share-row .secondary{padding:12px 8px;font-size:14px}
 </style>
 </head>
 <body>
