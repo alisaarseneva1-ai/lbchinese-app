@@ -199,21 +199,27 @@
     try { if (tg && tg.openTelegramLink) { tg.openTelegramLink(url); return; } } catch (e) {}
     window.open(url, "_blank");
   }
+  const BOT_USER = "lbchinese_ai_bot";
+  // личная ссылка: от бота (S.rl), а если приложение открыто без неё — собираем по Telegram ID
+  const refLink = () => { if (S.rl) return S.rl; try { const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user; if (u && u.id) return `https://t.me/${BOT_USER}?start=ref_${u.id}`; } catch (e) {} return `https://t.me/${BOT_USER}`; };
   function shareText(text) {
-    if (!S.rl) { toast("Открой приложение кнопкой в боте — тогда появится твоя ссылка"); return; }
-    haptic(); openTg("https://t.me/share/url?url=" + encodeURIComponent(S.rl) + "&text=" + encodeURIComponent(text));
+    haptic(); openTg("https://t.me/share/url?url=" + encodeURIComponent(refLink()) + "&text=" + encodeURIComponent(text));
   }
   // «В сторис»: Telegram 7.8+; картинка — готовый шаблон из webapp/share (публичный адрес GitHub Pages)
   const canStory = () => { try { return !!(tg && tg.shareToStory && (!tg.isVersionAtLeast || tg.isVersionAtLeast("7.8"))); } catch (e) { return false; } };
   const storyImg = () => { const m = [100, 50, 30, 14, 7, 3].find(n => (S.s || 0) >= n); return m ? `share/streak_${m}.jpg` : "share/hello.jpg"; };
-  function toStory(img, text) {
+  async function toStory(img, text) {
     if (!canStory()) { toast("Сторис из приложения работают в свежей версии Telegram — обнови его"); return; }
     haptic();
-    const o = { text: ((text || SHARE.story) + (S.rl ? " " + S.rl : "")).slice(0, 200) };
-    try { const u = tg.initDataUnsafe && tg.initDataUnsafe.user; if (u && u.is_premium && S.rl) o.widget_link = { url: S.rl, name: "Учить с Чиной" }; } catch (e) {}
-    try { tg.shareToStory(new URL(img || storyImg(), location.href).href, o); } catch (e) { toast("Не получилось открыть сторис"); }
+    const url = new URL(img || storyImg(), location.href).href;
+    // без картинки Telegram показывает чёрный экран — сначала проверяем, что она есть на сайте
+    try { const r = await fetch(url, { method: "HEAD", cache: "no-store" }); if (!r.ok) { toast("Картинка для сторис не найдена — загрузи папку share на GitHub"); return; } } catch (e) {}
+    const link = refLink();
+    const o = { text: ((text || SHARE.story) + " " + link).slice(0, 200) };
+    try { const u = tg.initDataUnsafe && tg.initDataUnsafe.user; if (u && u.is_premium) o.widget_link = { url: link, name: "Учить с Чиной" }; } catch (e) {}
+    try { tg.shareToStory(url, o); } catch (e) { toast("Не получилось открыть сторис"); }
   }
-  const shareRow = (text, story) => S.rl ? `<div class="share-row"><button class="secondary" id="shr">📤 Поделиться</button><button class="secondary" id="sty">📲 В сторис</button></div>` : "";
+  const shareRow = (text, story) => refLink() ? `<div class="share-row"><button class="secondary" id="shr">📤 Поделиться</button><button class="secondary" id="sty">📲 В сторис</button></div>` : "";
   function bindShare(text, story) {
     const a = document.getElementById("shr"), b = document.getElementById("sty");
     if (a) a.onclick = () => shareText(text);
@@ -840,7 +846,7 @@
     on("lvl", () => ask("Пройти тест на уровень в чате с ботом?", () => send({ t: "level" })));
     on("inv", () => shareText(SHARE.invite));
     on("sty", () => toStory(storyImg(), SHARE.story));
-    on("stk", () => S.sp ? openTg(S.sp) : toast("Стикеры Чины скоро появятся"));
+    on("stk", () => openTg(S.sp || `https://t.me/${BOT_USER}?start=stickers`));
     on("lvset", levelSheet);
     on("pyset", pinyinSheet);
     on("myd", () => go(myDictionary));
