@@ -266,6 +266,7 @@
   // sub (автопродление), lm, ly (ссылки на счёт Stars), tm, ty (ссылки Tribute), fc (сообщений Чине бесплатно), ff}
   // Нет S.pr — пейволл выключен (PAYWALL=off) или старая ссылка: всё открыто.
   let PR = S.pr && S.pr.on ? S.pr : null;
+  const CL = () => Array.isArray(S.cl) ? S.cl : [];
   const PREM_F = {
     chat: "Разговор с Чиной без лимита", voice: "Голосовые с разбором тонов", ask: "Учитель без лимита",
     essay: "Проверка сочинений без лимита", exam: "Пробные экзамены HSK 3.0", hskk: "Устный экзамен HSK 口语 и HSKK",
@@ -793,6 +794,9 @@
         </div>
       </div>
 
+      ${PR && (!PR.p || (!PR.sub && ["trial", "founder", "ref"].includes(PR.k))) ? `<button class="prem-strip" id="premB"><span class="crown">👑</span><span class="grow"><b>${PR.p ? `Премиум до ${esc(fmtDate(PR.u))}` : "Чина Премиум"}</b><small>${PR.p ? "Продли картой или звёздами — всё останется открытым" : "Экзамены, ролевые игры, Чина без лимита"}${CL().length ? ` · клуб −${CL()[0].dc || 50}%` : ""}</small></span><span class="go-s">${PR.tm ? `💳 ${Number((PR.tp || [])[0] || PR.rm).toLocaleString("ru-RU")} ₽` : `от ${PR.m} ⭐`}</span></button>` : ""}
+      ${CL().map(c => `<button class="club-card" data-club="${c.i}"><span class="club-ic">🗣</span><span class="grow"><span class="club-k">Разговорный клуб</span><b>${esc(c.t)}</b>${c.d ? `<small>${esc(c.d)}</small>` : ""}<small class="club-p">${c.p ? (c.pr ? `<s>${c.p.toLocaleString("ru-RU")} ₽</s> <b>${c.pp.toLocaleString("ru-RU")} ₽</b> · твоя скидка ${c.dc}% 👑` : `${c.p.toLocaleString("ru-RU")} ₽ · с Премиумом ${c.pp.toLocaleString("ru-RU")} ₽`) : "Бесплатно"}</small></span><span class="go-s">Записаться</span></button>`).join("")}
+
       <div class="tiles">
         <button class="tile t-sky" id="rev"><span class="hz">复</span><span class="ic">${icon("repeat")}</span>
           <span><span class="num">${due || "✓"}</span><b style="margin-top:6px">Повторение</b><small>${due ? `${plural(due, "слово ждёт", "слова ждут", "слов ждут")} тебя сегодня` : "На сегодня всё повторено"}</small></span></button>
@@ -803,7 +807,6 @@
         <button class="tile t-navy" id="hskkP"><span class="hz">说</span><span class="ic">${icon("mic")}</span>
           <span><b>Устный экзамен${lockMark("hskk")}</b><small>HSK 口语 и HSKK</small></span></button>
       </div>
-      ${PR && !PR.p ? `<button class="prem-strip" id="premB"><span class="crown">👑</span><span class="grow"><b>Чина Премиум</b><small>Экзамены, ролевые игры, Чина без лимита${PR.fo ? " · цена основателя" : ""}</small></span><span class="go-s">от ${PR.m} ⭐</span></button>` : ""}
 
       <button class="wide w-jade" id="lifeW"><span class="round" style="background:rgba(255,255,255,.14)">${icon("globe")}</span><span class="grow"><span class="t">Китайский для жизни</span><br><span class="s" style="color:rgba(255,255,255,.7)">Китай, работа, бизнес, для себя — ролевые игры</span></span>${icon("chev", "i chev")}</button>
       <button class="wide" id="askT"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Спросить учителя</span><br><span class="s">Любой вопрос о китайском — ответ в чате</span></span>${icon("chev", "i chev")}</button>
@@ -824,6 +827,7 @@
     on("hskkP", need(needP("hskk", () => go(hskkHub))));
     on("askT", need(() => askSheet()));
     on("premB", () => go(() => premiumScreen()));
+    document.querySelectorAll("[data-club]").forEach(b => b.addEventListener("click", () => { haptic(); send({ t: "club", i: +b.dataset.club }); }));
     on("lifeW", () => go(lifeTab, false));
     on("pay", () => send({ t: "pay" }));
     let tap = 0;
@@ -936,16 +940,18 @@
         ${feature && PREM_F[feature] ? `<div class="prem-lock">🔒 ${esc(PREM_F[feature])} — в Премиуме</div>` : ""}
         ${PR.p ? `<div class="prem-status">Премиум до <b>${esc(fmtDate(PR.u))}</b>${PR.k === "trial" ? " · пробная неделя" : PR.k === "founder" ? " · подарок основателю" : ""}${subOn ? " · автопродление" : ""}</div>`
                : `<p class="muted small" style="margin-top:6px">Урок дня, повторение и словарь — бесплатно всегда. Премиум открывает остальное:</p>`}</div>
-      <div class="prem-list">${PREM_LIST.map(([e_, t, s_]) => `<div class="prem-row"><span class="pe">${e_}</span><div class="grow"><b>${t}</b><small>${s_}</small></div><span class="pk">${icon("check")}</span></div>`).join("")}</div>
       ${PR.fo ? `<div class="prem-founder">🏅 <b>Цена основателя −30%</b> — навсегда, пока Премиум не прерывается</div>` : ""}
+      ${PR.tm || PR.ty ? `<div class="label" style="margin-top:18px">💳 Картой любого банка</div><div class="plans">${PR.ty ? `<button class="plan best" id="trY"><span class="tag">Выгоднее</span><b>Год картой</b><span class="price">${rub((PR.tp || [])[1] || PR.ry)}</span><small>≈${rub(Math.round(((PR.tp || [])[1] || PR.ry) / 12))}/мес · оплата за минуту</small></button>` : ""}${PR.tm && !subOn ? `<button class="plan" id="trM"><b>Месяц картой</b><span class="price">${rub((PR.tp || [])[0] || PR.rm)}</span><small>≈${perDay(((PR.tp || [])[0] || PR.rm) / 30)} ₽ в день · без автосписаний</small></button>` : ""}</div><div class="label" style="margin-top:18px">⭐ Или звёздами Telegram</div>` : ""}
       <div class="plans">
         <button class="plan best" id="buyY"><span class="tag">Выгоднее на ${PR.sv}%</span><b>Год</b><span class="price">${st(PR.y)}</span><small>≈${rub(PR.ry)} · ≈${rub(Math.round(PR.ry / 12))}/мес · ≈${perDay(PR.ry / 365)} ₽ в день</small></button>
         ${subOn ? "" : `<button class="plan" id="buyM"><b>Месяц</b><span class="price">${st(PR.m)}</span><small>≈${rub(PR.rm)} · ≈${perDay(PR.rm / 30)} ₽ в день · продлевается сам</small></button>`}
       </div>
       <p class="center muted small" style="margin-top:8px">Дешевле одного занятия с репетитором. Месяц отменяется в любой момент.</p>
-      ${PR.tm || PR.ty ? `<div class="label" style="margin-top:18px">Картой</div><div class="share-row">${PR.tm && !subOn ? `<button class="secondary" id="trM">💳 ${rub((PR.tp || [])[0] || PR.rm)}/мес</button>` : ""}${PR.ty ? `<button class="secondary" id="trY">💳 ${rub((PR.tp || [])[1] || PR.ry)}/год</button>` : ""}</div><p class="muted small" style="margin-top:6px">Оплата картой — через Tribute</p>` : ""}
+      <div class="label" style="margin-top:18px">Что открывает Премиум</div>
+      <div class="prem-list">${PREM_LIST.map(([e_, t, s_]) => `<div class="prem-row"><span class="pe">${e_}</span><div class="grow"><b>${t}</b><small>${s_}</small></div><span class="pk">${icon("check")}</span></div>`).join("")}</div>
+      ${CL().length ? `<div class="pcard prem-code"><b>🗣 Разговорный клуб −${CL()[0].dc || 50}%</b><p class="small muted" style="margin:4px 0 0">С Премиумом запись на клуб с носителями — со скидкой. Премиум окупается уже на первом клубе.</p></div>` : ""}
       <div class="pcard prem-code"><b>Есть код доступа?</b><p class="small muted" style="margin:4px 0 0">Напиши боту <b>/code КОД</b> — Премиум включится сразу.</p></div>
-      <p class="foot">Оплата — Telegram Stars. Условия: /terms · вопросы: /paysupport</p>`;
+      <p class="foot">Оплата — картой через Tribute или Telegram Stars. Условия: /terms · вопросы: /paysupport</p>`;
     const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", fn); };
     on("buyY", () => buyStars("y")); on("buyM", () => buyStars("m"));
