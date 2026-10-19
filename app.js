@@ -239,6 +239,21 @@
   const S = readState() || { n: "друг", l: 1, d: 1, s: 0, done: 0, k: {}, due: [], a: "", ok: 1, tl: 0, p: "china", demo: 1 };
   let P = null, byLevel = {}, dictLevel = 0, dictQuery = "";
 
+  // ---------- Чина Премиум ----------
+  // S.pr от бота: {on, p (Премиум действует), u (до), k (вид), fo (основатель), m, y (⭐), rm, ry (₽), sv (% выгоды года),
+  // sub (автопродление), lm, ly (ссылки на счёт Stars), tm, ty (ссылки Tribute), fc (сообщений Чине бесплатно), ff}
+  // Нет S.pr — пейволл выключен (PAYWALL=off) или старая ссылка: всё открыто.
+  const PR = S.pr && S.pr.on ? S.pr : null;
+  const PREM_F = {
+    chat: "Разговор с Чиной без лимита", voice: "Голосовые с разбором тонов", ask: "Учитель без лимита",
+    essay: "Проверка сочинений без лимита", exam: "Пробные экзамены HSK 3.0", hskk: "Устный экзамен HSK 口语 и HSKK",
+    role: "Ролевые игры «Для жизни»", final: "Итоговый тест уровня", hsk79: "Уровни HSK 7–9",
+    ahead: "Уроки вперёд", mistakes: "Работа над ошибками" };
+  const isPrem = () => !PR || !!PR.p;
+  const can = f => isPrem() || ((PR && PR.ff) || []).includes(f);
+  const lockMark = f => can(f) ? "" : " 🔒";
+  const needP = (f, fn) => () => can(f) ? fn() : go(() => premiumScreen(f));
+
   // ---------- утилиты ----------
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -711,6 +726,8 @@
     return `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="${track}" stroke-width="6"/><circle cx="32" cy="32" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.min(1, pct))}"/></svg>`; };
 
   // ---------- главная ----------
+  const lessonLock = l => !l ? "" : (S.done && l.kind !== "выходной" && !can("ahead")) || (l.lv >= 7 && !can("hsk79"))
+    || (l.kind === "тест" && l.topic.startsWith("Пробный экзамен") && !can("final")) ? " 🔒" : "";
   function home() {
     const l = lesson(S.l, S.d);
     const ws = l ? lessonWords(S.l, S.d) : [];
@@ -742,7 +759,7 @@
         <span class="hk">${l ? `${hsk(l.lv)} · неделя ${l.week}` : "Готово"}</span>
         <h3>${esc(title)}</h3><div class="meta">${esc(meta)}</div>
         <div class="row2">
-          ${l ? (S.done ? `<span class="done">${icon("check")}Сегодня пройдено</span><button class="go" id="start">${cta}</button>` : `<button class="go" id="start">${cta}</button>`) : "<span></span>"}
+          ${l ? (S.done ? `<span class="done">${icon("check")}Сегодня пройдено</span><button class="go" id="start">${cta}${lessonLock(l)}</button>` : `<button class="go" id="start">${cta}${lessonLock(l)}</button>`) : "<span></span>"}
           <div class="ring" title="Слов уровня выучено">${ringSvg(pct, "#F6C453")}<b>${Math.round(pct * 100)}%</b></div>
         </div>
       </div>
@@ -753,10 +770,11 @@
         <button class="tile t-cream" id="talkC"><span class="dog">${chinaSVG("happy")}</span><span class="ic">${icon("ask")}</span>
           <span><b>Чина</b><small>Разговор текстом и голосом</small></span></button>
         <button class="tile t-rose" id="hskP"><span class="hz">考</span><span class="ic">${icon("exam")}</span>
-          <span><b>Подготовка к HSK</b><small>Пробные экзамены 3.0</small></span></button>
+          <span><b>Подготовка к HSK${lockMark("exam")}</b><small>Пробные экзамены 3.0</small></span></button>
         <button class="tile t-navy" id="hskkP"><span class="hz">说</span><span class="ic">${icon("mic")}</span>
-          <span><b>Устный экзамен</b><small>HSK 口语 и HSKK</small></span></button>
+          <span><b>Устный экзамен${lockMark("hskk")}</b><small>HSK 口语 и HSKK</small></span></button>
       </div>
+      ${PR && !PR.p ? `<button class="prem-strip" id="premB"><span class="crown">👑</span><span class="grow"><b>Чина Премиум</b><small>Экзамены, ролевые игры, Чина без лимита${PR.fo ? " · цена основателя" : ""}</small></span><span class="go-s">от ${PR.m} ⭐</span></button>` : ""}
 
       <button class="wide w-jade" id="lifeW"><span class="round" style="background:rgba(255,255,255,.14)">${icon("globe")}</span><span class="grow"><span class="t">Китайский для жизни</span><br><span class="s" style="color:rgba(255,255,255,.7)">Китай, работа, бизнес, для себя — ролевые игры</span></span>${icon("chev", "i chev")}</button>
       <button class="wide" id="askT"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Спросить учителя</span><br><span class="s">Любой вопрос о китайском — ответ в чате</span></span>${icon("chev", "i chev")}</button>
@@ -765,14 +783,18 @@
     navBar("home");
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
     const need = fn => () => S.ok ? fn() : toast("Нужна подписка");
-    on("start", need(() => go(() => startLesson(S.l, S.d))));
-    on("saveS", need(() => go(() => startLesson(S.l, S.d))));
+    const lessonGate = () => !l ? null : (S.done && l.kind !== "выходной" && !can("ahead")) ? "ahead"
+      : (l.lv >= 7 && !can("hsk79")) ? "hsk79" : (l.kind === "тест" && l.topic.startsWith("Пробный экзамен") && !can("final")) ? "final" : null;
+    const startOrLock = () => { const f = lessonGate(); f ? go(() => premiumScreen(f)) : go(() => startLesson(S.l, S.d)); };
+    on("start", need(startOrLock));
+    on("saveS", need(startOrLock));
     on("bone", need(() => go(startBone)));
     on("rev", need(() => due ? go(startReview) : toast("Новые слова появятся в повторении завтра")));
     on("talkC", need(() => talkSheet("china")));
-    on("hskP", need(() => go(hskHub)));
-    on("hskkP", need(() => go(hskkHub)));
+    on("hskP", need(needP("exam", () => go(hskHub))));
+    on("hskkP", need(needP("hskk", () => go(hskkHub))));
     on("askT", need(() => askSheet()));
+    on("premB", () => go(() => premiumScreen()));
     on("lifeW", () => go(lifeTab, false));
     on("pay", () => send({ t: "pay" }));
     let tap = 0;
@@ -806,17 +828,17 @@
     $app.innerHTML = `<div class="title-big" style="margin-top:4px">Экзамены</div><div class="sub">Пробные варианты в формате HSK 3.0, его устной части и HSKK</div>
       <div class="big-tiles">
         <button class="tile t-rose" id="hskP"><span class="hz" style="font-size:96px">考</span><span class="ic">${icon("exam")}</span>
-          <span><b>HSK 3.0</b><small>Уровни 1–6 и 7–9: аудирование, чтение, письмо (на 7–9 и перевод), с таймером</small></span></button>
+          <span><b>HSK 3.0${lockMark("exam")}</b><small>Уровни 1–6 и 7–9: аудирование, чтение, письмо (на 7–9 и перевод), с таймером</small></span></button>
         <button class="tile t-navy" id="hskkP"><span class="hz" style="font-size:96px">说</span><span class="ic">${icon("mic")}</span>
-          <span><b>Устный экзамен</b><small>HSK 3.0 口语 (уровни 3–6), HSKK и 7–9: отвечаешь голосом, Чина оценивает</small></span></button>
+          <span><b>Устный экзамен${lockMark("hskk")}</b><small>HSK 3.0 口语 (уровни 3–6), HSKK и 7–9: отвечаешь голосом, Чина оценивает</small></span></button>
         <button class="tile t-sky" id="wr" style="min-height:120px"><span class="hz" style="font-size:80px">写</span><span class="ic">${icon("book")}</span>
           <span><b style="font-size:18px">Письмо и сочинение</b><small>Пишешь — учитель проверяет по критериям экзамена</small></span></button>
       </div>
       ${last.length ? `<div class="pcard"><div class="label" style="margin:0 0 8px">Последние результаты</div>${last.map(x => `<div class="level-row" style="grid-template-columns:1fr auto"><span class="small">${examName(x.lv)} · ${x.v > 1 || (EXAMS && variantsOf(x.lv).length > 1) ? "вариант " + (x.v || 1) + " · " : ""}${esc(x.what)} · ${esc(x.d)}</span><b>${x.pct}%</b></div>`).join("")}</div>` : ""}`;
     navBar("exams");
     const need = fn => () => S.ok ? fn() : toast("Нужна подписка");
-    document.getElementById("hskP").onclick = need(() => go(hskHub));
-    document.getElementById("hskkP").onclick = need(() => go(hskkHub));
+    document.getElementById("hskP").onclick = need(needP("exam", () => go(hskHub)));
+    document.getElementById("hskkP").onclick = need(needP("hskk", () => go(hskkHub)));
     document.getElementById("wr").onclick = need(async () => { await loadExams(); const ex = examOf(examLv(S.l), varOf(examLv(S.l))); go(() => writingHub(ex)); });
   }
 
@@ -824,7 +846,7 @@
   function profileTab() {
     const cols = LEVELS.map(lv => { const p = Math.min(1, known(lv) / size(lv)); return `<div class="lv-col ${lv === S.l ? "cur" : ""}"><i><u style="height:${Math.max(4, Math.round(p * 100))}%"></u></i><small>${lv}</small></div>`; }).join("");
     const total = LEVELS.reduce((n, lv) => n + known(lv), 0);
-    $app.innerHTML = `<div class="top"><span class="me" style="width:64px;height:64px">${chinaSVG("love")}</span><div class="grow"><div class="name" style="font-size:22px">${esc(S.n)}</div><div class="hi">Сейчас ${hsk(S.l)} · ${S.s} ${plural(S.s, "день", "дня", "дней")} подряд</div></div></div>
+    $app.innerHTML = `<div class="top"><span class="me" style="width:64px;height:64px">${chinaSVG("love")}</span><div class="grow"><div class="name" style="font-size:22px">${esc(S.n)}${PR && PR.p ? ` <span class="crown-b" title="Чина Премиум">👑</span>` : ""}</div><div class="hi">Сейчас ${hsk(S.l)} · ${S.s} ${plural(S.s, "день", "дня", "дней")} подряд</div></div></div>
       <div class="pcard" id="motiv"><div class="mstats"><div><b>🔥 ${S.s || 0}</b><small>${plural(S.s || 0, "день", "дня", "дней")} подряд</small></div><div><b>🧊 ${S.fz || 0}</b><small>${plural(S.fz || 0, "заморозка", "заморозки", "заморозок")}</small></div><div><b>👫 ${S.rc || 0}</b><small>${plural(S.rc || 0, "друг", "друга", "друзей")}</small></div></div>
         <div class="badges">${BADGES.map(([k, ic, t]) => `<span class="${(S.bd || []).includes(k) ? "" : "off"}">${ic} ${t}</span>`).join("")}</div>
         <p class="small muted" style="margin:10px 0 12px">Друг пройдёт первый урок — вам обоим по заморозке 🧊: она спасает серию, если пропустить день. За 3 друзей — значок «Друг Чины».</p>
@@ -839,7 +861,8 @@
         <button class="item" id="pyset"><span class="i py-ic">拼</span><div class="grow"><div class="t">Пиньинь</div><div class="s" id="pyv">${PY_MODES[pyMode()]}</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов и фраз</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="fbk">${icon("ask")}<div class="grow"><div class="t">Оставить отзыв</div><div class="s">Видит только команда LinguaBridge</div></div>${icon("chev", "i chev")}</button>
-        <div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">${S.f ? "бесплатно, без ограничений" : S.ok ? (S.a ? "до " + fmtDate(S.a) : "активен") : "закончился"}</div></div>${S.ok ? "" : `<button class="secondary" id="pay" style="width:auto;padding:10px 16px">Оформить</button>`}</div>
+        ${PR ? `<button class="item" id="premI"><span class="i" style="font-size:20px;text-align:center">👑</span><div class="grow"><div class="t">Чина Премиум</div><div class="s">${PR.p ? "до " + fmtDate(PR.u) + (PR.sub ? " · автопродление" : "") : "бесплатная версия · от " + PR.m + " ⭐ в месяц"}</div></div>${icon("chev", "i chev")}</button>`
+          : `<div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">бесплатно, без ограничений</div></div></div>`}
       </div>`;
     navBar("prof");
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
@@ -852,6 +875,53 @@
     on("myd", () => go(myDictionary));
     on("fbk", feedbackSheet);
     on("pay", () => send({ t: "pay" }));
+    on("premI", () => go(() => premiumScreen()));
+  }
+
+  // ---------- экран «Чина Премиум» ----------
+  const PREM_LIST = [["🐶", "Чина без лимита", "и голосовые с разбором тонов"], ["📝", "Пробные HSK 3.0 и устный HSKK", "с таймером, оценкой и разбором"],
+    ["🎓", "Учитель и проверка сочинений", "без дневного лимита"], ["🎭", "Ролевые игры «Для жизни»", "Китай, работа, бизнес, хобби"],
+    ["🚀", "Уроки вперёд и HSK 7–9", "сколько хочешь в день, итоговые тесты уровня"], ["🔁", "Работа над ошибками", "Чина возвращает то, что не получалось"]];
+  function buyStars(k) {
+    const link = PR && PR["l" + k];
+    haptic();
+    if (link && tg && tg.openInvoice && (!tg.isVersionAtLeast || tg.isVersionAtLeast("6.1"))) {
+      try {
+        tg.openInvoice(link, status => {
+          if (status === "paid") { PR.p = 1; haptic("success"); confetti("big"); toast("Ура! Чина Премиум включён 👑"); go(() => premiumScreen(), true); }
+          else if (status === "failed") toast("Оплата не прошла — попробуй ещё раз");
+        });
+        return;
+      } catch (e) {}
+    }
+    send({ t: "buy", p: k });     // ссылки ещё нет — бот пришлёт кнопку оплаты в чат
+  }
+  function premiumScreen(feature) {
+    if (!PR) return toHome();
+    const rub = n => Number(n).toLocaleString("ru-RU") + " ₽", st = n => Number(n).toLocaleString("ru-RU") + " ⭐";
+    const perDay = n => Math.max(1, Math.round(n));
+    const subOn = PR.p && PR.sub;
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="prem-head"><div class="prem-dog">${chinaSVG(PR.p ? "love" : feature ? "think" : "joy")}</div>
+        <div class="eyebrow">琪娜 · Premium</div><h2 class="prem-title">Чина Премиум 👑</h2>
+        ${feature && PREM_F[feature] ? `<div class="prem-lock">🔒 ${esc(PREM_F[feature])} — в Премиуме</div>` : ""}
+        ${PR.p ? `<div class="prem-status">Премиум до <b>${esc(fmtDate(PR.u))}</b>${PR.k === "trial" ? " · пробная неделя" : PR.k === "founder" ? " · подарок основателю" : ""}${subOn ? " · автопродление" : ""}</div>`
+               : `<p class="muted small" style="margin-top:6px">Урок дня, повторение и словарь — бесплатно всегда. Премиум открывает остальное:</p>`}</div>
+      <div class="prem-list">${PREM_LIST.map(([e_, t, s_]) => `<div class="prem-row"><span class="pe">${e_}</span><div class="grow"><b>${t}</b><small>${s_}</small></div><span class="pk">${icon("check")}</span></div>`).join("")}</div>
+      ${PR.fo ? `<div class="prem-founder">🏅 <b>Цена основателя −30%</b> — навсегда, пока Премиум не прерывается</div>` : ""}
+      <div class="plans">
+        <button class="plan best" id="buyY"><span class="tag">Выгоднее на ${PR.sv}%</span><b>Год</b><span class="price">${st(PR.y)}</span><small>≈${rub(PR.ry)} · ≈${rub(Math.round(PR.ry / 12))}/мес · ≈${perDay(PR.ry / 365)} ₽ в день</small></button>
+        ${subOn ? "" : `<button class="plan" id="buyM"><b>Месяц</b><span class="price">${st(PR.m)}</span><small>≈${rub(PR.rm)} · ≈${perDay(PR.rm / 30)} ₽ в день · продлевается сам</small></button>`}
+      </div>
+      <p class="center muted small" style="margin-top:8px">Дешевле одного занятия с репетитором. Месяц отменяется в любой момент.</p>
+      ${PR.tm || PR.ty ? `<div class="label" style="margin-top:18px">Картой</div><div class="share-row">${PR.tm && !subOn ? `<button class="secondary" id="trM">💳 ${rub((PR.tp || [])[0] || PR.rm)}/мес</button>` : ""}${PR.ty ? `<button class="secondary" id="trY">💳 ${rub((PR.tp || [])[1] || PR.ry)}/год</button>` : ""}</div><p class="muted small" style="margin-top:6px">Оплата картой — через Tribute</p>` : ""}
+      <div class="pcard prem-code"><b>Есть код доступа?</b><p class="small muted" style="margin:4px 0 0">Напиши боту <b>/code КОД</b> — Премиум включится сразу.</p></div>
+      <p class="foot">Оплата — Telegram Stars. Условия: /terms · вопросы: /paysupport</p>`;
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", fn); };
+    on("buyY", () => buyStars("y")); on("buyM", () => buyStars("m"));
+    const openPay = u => { haptic(); if (/^https:\/\/t\.me\//.test(u)) openTg(u); else if (tg && tg.openLink) tg.openLink(u); else window.open(u, "_blank"); };
+    on("trM", () => openPay(PR.tm)); on("trY", () => openPay(PR.ty));
   }
 
   // ---------- настройка пиньиня ----------
@@ -882,7 +952,7 @@
       9: `${size(9)} слов: чэнъюи, поговорки, стилистика · учебный этап` };
     bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">Выбрать уровень</h2>
       <p class="muted small" style="margin-top:4px">Урок начнётся с первой недели уровня. Выученные слова и повторения сохранятся.</p>
-      <div class="list" style="margin-top:14px">${LEVELS.map(lv => `<button class="item" data-lv="${lv}"><b style="width:78px;white-space:nowrap">${hsk(lv)}</b><div class="grow s">${INFO[lv]}</div>${lv === S.l ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div>
+      <div class="list" style="margin-top:14px">${LEVELS.map(lv => `<button class="item" data-lv="${lv}"><b style="width:78px;white-space:nowrap">${hsk(lv)}${lv >= 7 ? lockMark("hsk79") : ""}</b><div class="grow s">${INFO[lv]}</div>${lv === S.l ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div>
       <p class="muted small" style="margin-top:10px">До HSK 9 всего 11 000 слов; официальный блок 7–9 — 5 600 слов.</p>${note79()}</div>`;
     bindLinks(bg);
     bg.querySelectorAll("[data-lv]").forEach(b => b.onclick = e => { e.stopPropagation(); const lv = +b.dataset.lv; haptic();
@@ -944,7 +1014,7 @@
       if (l.grammar) steps.push({ type: "rule", l });
       ws.forEach((w, i) => steps.push({ type: "word", w, n: i + 1, of: ws.length }));
       const todays = new Set(ws.map(w => "w:" + w.h));
-      ex = weakSet((S.wk || []).filter(k => !todays.has(k)).slice(0, 4)).concat(lessonSet(l, ws));
+      ex = (can("mistakes") ? weakSet((S.wk || []).filter(k => !todays.has(k)).slice(0, 4)) : []).concat(lessonSet(l, ws));
     }
     ex.forEach(q => steps.push({ type: "q", q }));
     run(steps, (sc, tot, m, r, g) => ({ t: "lesson", l: lv, d, sc, tot, m: m.slice(0, 40), r: r.slice(0, 60), g: g.slice(0, 20) }),
@@ -964,7 +1034,7 @@
   function startReview2() {
     const mk = [EX.meaning, EX.reverse, EX.pinyin, w => EX.gap(w)];
     const ws = shuffle((S.due || []).map(word).filter(Boolean));
-    const weak = weakSet((S.wk || []).filter(k => !(S.due || []).includes(k.slice(2))).slice(0, 5));
+    const weak = can("mistakes") ? weakSet((S.wk || []).filter(k => !(S.due || []).includes(k.slice(2))).slice(0, 5)) : [];
     run(weak.map(q => ({ type: "q", q })).concat(ws.map(w => ({ type: "q", q: mk[Math.floor(Math.random() * 4)](w) || EX.meaning(w) }))),
         (sc, tot, m, r, g) => ({ t: "review", r: r.slice(0, 60), g: g.slice(0, 20) }), "Повторение", true);
   }
@@ -1758,7 +1828,7 @@
         <div class="hero" style="margin-top:16px"><div class="glyph-bg">演</div><span class="hk">🎭 Ролевая игра с Чиной</span>
           <h3 style="font-size:18px;max-width:100%">Чина — ${esc(tp.role.ai_role)}</h3>
           <div class="meta">Твоя задача: ${esc(tp.role.user_goal)}</div>
-          <div class="row2"><button class="go" id="role">Начать — голосом или текстом</button></div></div>
+          <div class="row2"><button class="go" id="role">${can("role") ? "Начать — голосом или текстом" : "🔒 Ролевая игра — в Премиуме"}</button></div></div>
 
         <div class="label">Главные фразы</div>
         <div class="pcard" style="margin-top:0;padding:6px 14px">${tp.phrases.map((p, i) => `<div class="phrase"><button class="sound-mini" data-ph="${i}">${icon("sound")}</button>
@@ -1794,7 +1864,7 @@
       document.getElementById("learnAll").onclick = () => { tp.phrases.forEach(p => { const list = myWords(); if (!list.some(x => x[0] === p.zh)) { list.unshift([p.zh, p.py, p.ru, Date.now()]); store.set("my", list.slice(0, 500)); }
           const pend = store.get("add", []); if (!pend.some(x => x[0] === p.zh)) { pend.push([p.zh, p.py, p.ru]); store.set("add", pend.slice(-80)); } });
         toast(`${tp.phrases.length} фраз — в словаре и повторении`); };
-      const startRole = () => S.ok ? ask("Начать ролевую игру в чате? Чина начнёт первой — отвечай текстом или голосовыми.", () => sendP({ t: "role", k: [tid, pid] })) : toast("Нужна подписка");
+      const startRole = () => !can("role") ? go(() => premiumScreen("role")) : S.ok ? ask("Начать ролевую игру в чате? Чина начнёт первой — отвечай текстом или голосовыми.", () => sendP({ t: "role", k: [tid, pid] })) : toast("Нужна подписка");
       document.getElementById("role").onclick = startRole; document.getElementById("role2").onclick = startRole;
     };
     cleanup = () => stopAudio();
@@ -1828,5 +1898,5 @@
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
   }
   const VIEW = new URLSearchParams(location.search).get("v");
-  load().then(() => { setTimeout(loadExamples, 300); }).then(() => VIEW === "hsk" ? go(hskHub) : VIEW === "hskk" ? go(hskkHub) : VIEW === "life" ? go(lifeTab, false) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
+  load().then(() => { setTimeout(loadExamples, 300); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
