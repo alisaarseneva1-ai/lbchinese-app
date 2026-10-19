@@ -938,7 +938,7 @@
       <div class="prem-head"><div class="prem-dog">${chinaSVG(PR.p ? "love" : feature ? "think" : "joy")}</div>
         <div class="eyebrow">琪娜 · Premium</div><h2 class="prem-title">Чина Премиум 👑</h2>
         ${feature && PREM_F[feature] ? `<div class="prem-lock">🔒 ${esc(PREM_F[feature])} — в Премиуме</div>` : ""}
-        ${PR.p ? `<div class="prem-status">Премиум до <b>${esc(fmtDate(PR.u))}</b>${PR.k === "trial" ? " · пробная неделя" : PR.k === "founder" ? " · подарок основателю" : ""}${subOn ? " · автопродление" : ""}</div>`
+        ${PR.p ? `<div class="prem-status">Премиум до <b>${esc(fmtDate(PR.u))}</b>${PR.k === "trial" ? " · пробный период" : PR.k === "founder" ? " · подарок основателю" : ""}${subOn ? " · автопродление" : ""}</div>`
                : `<p class="muted small" style="margin-top:6px">Урок дня, повторение и словарь — бесплатно всегда. Премиум открывает остальное:</p>`}</div>
       ${PR.fo ? `<div class="prem-founder">🏅 <b>Цена основателя −30%</b> — навсегда, пока Премиум не прерывается</div>` : ""}
       ${PR.tm || PR.ty ? `<div class="label" style="margin-top:18px">💳 Картой любого банка</div><div class="plans">${PR.ty ? `<button class="plan best" id="trY"><span class="tag">Выгоднее</span><b>Год картой</b><span class="price">${rub((PR.tp || [])[1] || PR.ry)}</span><small>≈${rub(Math.round(((PR.tp || [])[1] || PR.ry) / 12))}/мес · оплата за минуту</small></button>` : ""}${PR.tm && !subOn ? `<button class="plan" id="trM"><b>Месяц картой</b><span class="price">${rub((PR.tp || [])[0] || PR.rm)}</span><small>≈${perDay(((PR.tp || [])[0] || PR.rm) / 30)} ₽ в день · без автосписаний</small></button>` : ""}</div><div class="label" style="margin-top:18px">⭐ Или звёздами Telegram</div>` : ""}
