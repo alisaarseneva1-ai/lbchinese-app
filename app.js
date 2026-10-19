@@ -236,14 +236,36 @@
       return JSON.parse(new TextDecoder().decode(bytes));
     } catch (e) { return null; }
   }
-  const S = readState() || { n: "друг", l: 1, d: 1, s: 0, done: 0, k: {}, due: [], a: "", ok: 1, tl: 0, p: "china", demo: 1 };
+  // Сервер бота: состояние и приём результатов, когда приложение открыто не кнопкой внизу чата
+  // (кнопка «Открыть» в списке чатов, меню бота, ссылка t.me/<бот>/app) — там sendData не работает.
+  const API = "https://129-101-125-133.sslip.io/app/";
+  const DEMO = { n: "друг", l: 1, d: 1, s: 0, done: 0, k: {}, due: [], a: "", ok: 1, tl: 0, p: "china", demo: 1 };
+  let S = readState() || DEMO;
+  const viaApi = () => !!(tg && tg.initData && (S.srv || (tg.initDataUnsafe && tg.initDataUnsafe.query_id)));
+  async function apiPost(path, body, ms) {
+    const c = window.AbortController ? new AbortController() : null;
+    const t = c ? setTimeout(() => c.abort(), ms || 8000) : 0;
+    try {   // text/plain — «простой» запрос без лишнего preflight
+      const r = await fetch(API + path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "text/plain" }, signal: c ? c.signal : undefined });
+      return { status: r.status, data: await r.json().catch(() => null) };
+    } finally { if (t) clearTimeout(t); }
+  }
+  // открыто без ?s= — берём свежее состояние ученика с сервера
+  async function fetchState() {
+    if (S !== DEMO || !tg || !tg.initData) return;
+    try {
+      const r = await apiPost("state", { i: tg.initData }, 7000);
+      if (r.status === 200 && r.data && typeof r.data === "object") { S = Object.assign(r.data, { srv: 1 }); PR = S.pr && S.pr.on ? S.pr : null; }
+      else if (r.status === 404) S = Object.assign({}, DEMO, { neu: 1 });
+    } catch (e) {}
+  }
   let P = null, byLevel = {}, dictLevel = 0, dictQuery = "";
 
   // ---------- Чина Премиум ----------
   // S.pr от бота: {on, p (Премиум действует), u (до), k (вид), fo (основатель), m, y (⭐), rm, ry (₽), sv (% выгоды года),
   // sub (автопродление), lm, ly (ссылки на счёт Stars), tm, ty (ссылки Tribute), fc (сообщений Чине бесплатно), ff}
   // Нет S.pr — пейволл выключен (PAYWALL=off) или старая ссылка: всё открыто.
-  const PR = S.pr && S.pr.on ? S.pr : null;
+  let PR = S.pr && S.pr.on ? S.pr : null;
   const PREM_F = {
     chat: "Разговор с Чиной без лимита", voice: "Голосовые с разбором тонов", ask: "Учитель без лимита",
     essay: "Проверка сочинений без лимита", exam: "Пробные экзамены HSK 3.0", hskk: "Устный экзамен HSK 口语 и HSKK",
@@ -268,9 +290,16 @@
     if (er.length && !payload.er) payload = Object.assign({}, payload, { er: er.slice(0, 3) });
     let data = JSON.stringify(payload);
     if (bytes(data) > 4090 && payload.er) { payload = Object.assign({}, payload); delete payload.er; data = JSON.stringify(payload); }
-    if (!tg || S.demo) { toast("Демо: открой приложение из бота, чтобы сохранять прогресс"); return false; }
-    if (tg.initDataUnsafe && tg.initDataUnsafe.query_id) { toast("Открой приложение кнопкой «🏮 Открыть LinguaBridge» внизу чата — тогда результат сохранится"); return false; }
+    if (S.neu && tg) { toast("Сначала нажми «Старт» в чате с ботом — потом прогресс будет сохраняться"); return false; }
+    if (!tg || (S.demo && !viaApi())) { toast("Демо: открой приложение из бота, чтобы сохранять прогресс"); return false; }
     if (bytes(data) > 4090) { toast("Слишком много данных за раз — сохрани результат ещё раз"); return false; }
+    if (viaApi()) {   // как sendData: отдаём боту и закрываем приложение — ответ придёт в чат
+      apiPost("send", { i: tg.initData, d: data }).then(r => {
+        if (r.status === 200) { store.set("errs", []); try { tg.close(); } catch (e) {} }
+        else toast(r.status === 401 ? "Сессия устарела — закрой и открой приложение заново" : "Не удалось сохранить — попробуй ещё раз");
+      }).catch(() => toast("Нет связи с ботом — проверь интернет и попробуй ещё раз"));
+      return true;
+    }
     try { tg.sendData(data); store.set("errs", []); return true; } catch (e) { toast("Не удалось отправить результат боту — попробуй ещё раз"); return false; }
   }
   // подтверждение своим окном: системные окна Telegram на части Android-версий падают с ошибкой
@@ -1898,5 +1927,5 @@
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
   }
   const VIEW = new URLSearchParams(location.search).get("v");
-  load().then(() => { setTimeout(loadExamples, 300); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
+  Promise.all([load(), fetchState()]).then(() => { setTimeout(loadExamples, 300); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
