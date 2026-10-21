@@ -271,7 +271,7 @@
     chat: "Разговор с Чиной без лимита", voice: "Голосовые с разбором тонов", ask: "Учитель без лимита",
     essay: "Проверка сочинений без лимита", exam: "Пробные экзамены HSK 3.0", hskk: "Устный экзамен HSK 口语 и HSKK",
     role: "Ролевые игры «Для жизни»", final: "Итоговый тест уровня", hsk79: "Уровни HSK 7–9",
-    ahead: "Уроки вперёд", mistakes: "Работа над ошибками" };
+    ahead: "Уроки вперёд", mistakes: "Работа над ошибками", scan: "Сканер текста: фото → перевод и грамматика" };
   const isPrem = () => !PR || !!PR.p;
   const can = f => isPrem() || ((PR && PR.ff) || []).includes(f);
   const lockMark = f => can(f) ? "" : " 🔒";
@@ -809,6 +809,7 @@
       </div>
 
       <button class="wide w-jade" id="lifeW"><span class="round" style="background:rgba(255,255,255,.14)">${icon("globe")}</span><span class="grow"><span class="t">Китайский для жизни</span><br><span class="s" style="color:rgba(255,255,255,.7)">Китай, работа, бизнес, для себя — ролевые игры</span></span>${icon("chev", "i chev")}</button>
+      <button class="wide w-scan" id="scanW"><span class="round" style="font-size:20px">📷</span><span class="grow"><span class="t">Сканер текста${lockMark("scan")}</span><br><span class="s">Фото китайского текста → перевод, слова и грамматика</span></span>${icon("chev", "i chev")}</button>
       <button class="wide" id="askT"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Спросить учителя</span><br><span class="s">Любой вопрос о китайском — ответ в чате</span></span>${icon("chev", "i chev")}</button>
       ${S.demo ? `<div class="foot">Демо-режим · открой приложение кнопкой в боте</div>` : ""}
     `;
@@ -829,6 +830,7 @@
     on("premB", () => go(() => premiumScreen()));
     document.querySelectorAll("[data-club]").forEach(b => b.addEventListener("click", () => { haptic(); send({ t: "club", i: +b.dataset.club }); }));
     on("lifeW", () => go(lifeTab, false));
+    on("scanW", needP("scan", () => go(scanScreen)));
     on("pay", () => send({ t: "pay" }));
     let tap = 0;
     document.getElementById("dog").addEventListener("click", () => {
@@ -912,7 +914,7 @@
   }
 
   // ---------- экран «Чина Премиум» ----------
-  const PREM_LIST = [["🐶", "Чина без лимита", "и голосовые с разбором тонов"], ["📝", "Пробные HSK 3.0 и устный HSKK", "с таймером, оценкой и разбором"],
+  const PREM_LIST = [["🐶", "Чина без лимита", "и голосовые с разбором тонов"], ["📷", "Сканер текста", "фото → перевод, слова по тапу и грамматика"], ["📝", "Пробные HSK 3.0 и устный HSKK", "с таймером, оценкой и разбором"],
     ["🎓", "Учитель и проверка сочинений", "без дневного лимита"], ["🎭", "Ролевые игры «Для жизни»", "Китай, работа, бизнес, хобби"],
     ["🚀", "Уроки вперёд и HSK 7–9", "сколько хочешь в день, итоговые тесты уровня"], ["🔁", "Работа над ошибками", "Чина возвращает то, что не получалось"]];
   function buyStars(k) {
@@ -1266,6 +1268,7 @@
   function dictionary() {
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <h2 style="font-size:24px;margin-bottom:12px">Словарь</h2>
+      <button class="wide w-scan" id="scanD" style="margin:0 0 12px"><span class="round" style="font-size:20px">📷</span><span class="grow"><span class="t">Сканер текста${lockMark("scan")}</span><br><span class="s">Сфотографируй текст — переведу и разберу</span></span>${icon("chev", "i chev")}</button>
       <label class="search">${icon("search")}<input id="q" placeholder="Иероглиф, пиньинь или перевод" value="${esc(dictQuery)}" autocomplete="off"></label>
       <div class="tabs">${[0, ...LEVELS].map(l => `<button class="tab ${dictLevel === l ? "on" : ""}" data-l="${l}">${l ? hsk(l) : "Все"}</button>`).join("")}</div>
       ${dictLevel >= 7 ? note79(true) : ""}
@@ -1273,6 +1276,7 @@
     bindLinks($app);
     const bk = document.getElementById("bk"); if (bk) bk.remove();
     navBar("dict");
+    document.getElementById("scanD").onclick = () => { haptic(); can("scan") ? go(scanScreen) : go(() => premiumScreen("scan")); };
     const input = document.getElementById("q");
     const plain = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s/g, "");
     const render = () => {
@@ -1381,7 +1385,7 @@
     root.querySelectorAll(".tw").forEach(el => el.onclick = e => { e.stopPropagation(); haptic(); tapSheet(el.dataset.w); });
   }
   function tapSheet(h) {
-    const w = word(h), g = GLOSS[h];
+    const w = word(h), g = GLOSS[h] || SCANG[h];
     const p = w ? w.p : g ? g[0] : "", m = w ? w.m : g ? g[1] : "";
     const chars = !w && !g && h.length > 1 ? [...h].map(c => word(c) || (GLOSS[c] ? { h: c, p: GLOSS[c][0], m: GLOSS[c][1] } : null)).filter(Boolean) : [];
     const mine = myWords().some(x => x[0] === h);
@@ -1397,6 +1401,124 @@
     const lb = bg.querySelector("#learn"); if (lb) lb.onclick = e => { e.stopPropagation(); learnWord(h, p, m); bg.remove(); };
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
   }
+  // ---------- сканер текста: фото или вставленный текст → перевод, слова по тапу, грамматика ----------
+  const SCANG = {};          // слова из разборов: иероглифы → [пиньинь, перевод] (для карточки по тапу)
+  let lastScan = null;
+  function scanSegment(text, dict) {
+    const out = []; let i = 0; const s = String(text || "");
+    const maxL = Math.max(segMax, ...Object.keys(dict).map(k => k.length), 1);
+    while (i < s.length) {
+      const c = s[i];
+      if (!HAN.test(c)) { let j = i; while (j < s.length && !HAN.test(s[j])) j++; out.push([s.slice(i, j), 0]); i = j; continue; }
+      let found = null;
+      for (let L = Math.min(maxL, s.length - i); L >= 1; L--) { const w = s.substr(i, L); if (dict[w] || P.words.has(w) || (L === 1 && GLOSS[w])) { found = w; break; } }
+      if (!found) found = c;
+      out.push([found, 1]); i += found.length;
+    }
+    return out;
+  }
+  function shrinkImage(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => { const im = new Image(); im.onload = () => {
+        const k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL("image/jpeg", 0.85)); };
+        im.onerror = () => rej(new Error("img")); im.src = r.result; };
+      r.onerror = () => rej(new Error("read")); r.readAsDataURL(file);
+    });
+  }
+  const scanReady = () => !!(tg && tg.initData) && !S.demo;
+  async function scanScreen() {
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="scan-head"><div class="scan-dog">${chinaSVG("think")}</div>
+        <div class="grow"><div class="eyebrow">扫一扫 · сканер</div><div class="title-big" style="margin:2px 0 0">Сканер текста</div></div></div>
+      <div class="sub">Сфотографируй китайский текст — вывеску, меню, страницу учебника, переписку — или вставь его. Чина переведёт, покажет пиньинь и грамматику, а любое слово можно нажать и добавить в повторение.</div>
+      <label class="scan-cam" id="camL"><input type="file" id="cam" accept="image/*" hidden>
+        <span class="scan-ic">📷</span><span class="grow"><b>Сфотографировать или выбрать фото</b><small>Лучше ровно, крупно и при хорошем свете</small></span></label>
+      <div class="pcard" style="margin-top:12px"><div class="label" style="margin:0 0 6px">Или вставь текст</div>
+        <textarea id="stxt" class="scan-ta" placeholder="Например: 我想去北京看看长城。"></textarea>
+        <button class="primary" id="sgo" style="margin-top:10px">Разобрать текст</button></div>
+
+      <div id="hist"></div>`;
+    navBar("dict");
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = toHome;
+    document.getElementById("cam").onchange = async e => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      let img; try { img = await shrinkImage(f); } catch (er) { return toast("Не получилось открыть фото"); }
+      doScan({ img });
+    };
+    document.getElementById("sgo").onclick = () => { const t = document.getElementById("stxt").value.trim();
+      if (!HAN.test(t)) return toast("Вставь текст с иероглифами"); doScan({ t }); };
+    if (scanReady()) {
+      try { const r = await apiPost("scans", { i: tg.initData }, 6000);
+        const box = document.getElementById("hist");
+        if (box && r.status === 200 && r.data && r.data.list && r.data.list.length) {
+          box.innerHTML = `<div class="label" style="margin-top:18px">Мои разборы</div><div class="list">${r.data.list.map(x =>
+            `<button class="item" data-sid="${x.id}"><span class="round zh" style="background:var(--sky2)">${esc((x.t || "?")[0])}</span><div class="grow"><div class="t zh">${esc(x.t)}</div><div class="s">${esc(fmtDate((x.ts || "").slice(0, 10)))}</div></div>${icon("chev", "i chev")}</button>`).join("")}</div>`;
+          box.querySelectorAll("[data-sid]").forEach(b => b.onclick = () => openScan(+b.dataset.sid));
+        }
+      } catch (e) {}
+    }
+  }
+  async function openScan(sid) {
+    if (!scanReady()) return toast("Открой приложение из бота");
+    busy(true);
+    try { const r = await apiPost("scans", { i: tg.initData, id: sid }, 8000); busy(false);
+      if (r.status === 200 && r.data && r.data.text) go(() => scanResult(r.data)); else toast("Разбор не найден");
+    } catch (e) { busy(false); toast("Нет связи — попробуй ещё раз"); }
+  }
+  async function doScan(body) {
+    if (!scanReady()) return toast("Сканер работает, когда приложение открыто из бота");
+    haptic();
+    $app.innerHTML = `<div class="scan-wait"><div class="scan-dog big">${chinaSVG("think")}</div><h3>Чина читает текст…</h3>
+      <p class="muted">Перевод, слова и грамматика — до минуты</p><div class="scan-bar"><i></i></div></div>`;
+    dropNav();
+    let r;
+    try { r = await apiPost("scan", Object.assign({ i: tg.initData }, body), 120000); }
+    catch (e) { toast("Нет связи с ботом — попробуй ещё раз"); return go(scanScreen, false); }
+    if (r.status === 200 && r.data && r.data.text) return go(() => scanResult(r.data), false);
+    const er = r.data && r.data.error;
+    if (er === "limit") return go(() => premiumScreen("scan"), false);
+    toast(er === "notext" ? "Не нашла китайского текста — сфотографируй крупнее и ровнее" : er === "cap" ? "На сегодня сканов достаточно — продолжим завтра 🐶"
+      : r.status === 404 ? "Сканер появится после обновления бота" : "Не получилось разобрать — попробуй ещё раз");
+    go(scanScreen, false);
+  }
+  function scanResult(res) {
+    lastScan = res;
+    const dict = {}; (res.words || []).forEach(([h, p, m]) => { dict[h] = [p, m]; SCANG[h] = [p, m]; });
+    const mine = new Set(myWords().map(x => x[0]));
+    const html = scanSegment(res.text, dict).map(([t, han]) => han ? `<span class="tw" data-w="${esc(t)}">${esc(t)}</span>` : esc(t)).join("").replace(/\n/g, "<br>");
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="eyebrow" style="margin-top:4px">Разбор текста</div>
+      <div class="pcard scan-text"><div class="small muted" style="margin-bottom:6px">👆 Нажми на любое слово</div><div class="zh scan-zh">${html}</div>
+        ${res.py ? `<button class="chip" id="pyT" style="font-size:14px;margin-top:10px;padding:8px 12px">Показать пиньинь</button><div class="scan-py" id="pyB" hidden>${esc(res.py).replace(/\n/g, "<br>")}</div>` : ""}</div>
+      ${res.tr ? `<div class="label">Перевод</div><div class="pcard scan-tr">${esc(res.tr).replace(/\n/g, "<br>")}</div>` : `<div class="note">Перевод сейчас не получился — слова ниже из словаря HSK.</div>`}
+      ${(res.gram || []).length ? `<div class="label">Конструкции и грамматика</div>${res.gram.map(([c, x, r]) => `<div class="pcard gram-card"><div class="gram-c">${esc(c)}</div>${x ? `<div class="zh small" style="margin-top:4px;color:var(--seal)">${esc(x)}</div>` : ""}<div class="small" style="margin-top:6px">${esc(r)}</div></div>`).join("")}` : ""}
+      ${(res.words || []).length ? `<div class="label">Слова из текста · ${res.words.length}</div>
+        <div class="pcard" style="padding:4px 14px">${res.words.map(([h, p, m], i) => `<div class="scan-w"><button class="grow scan-wb" data-w="${esc(h)}"><span class="zh">${esc(h)}</span> ${pyH(p, "py-in", true, "span")}<br><span class="small">${esc(m)}</span></button>
+          <button class="scan-add ${mine.has(h) ? "on" : ""}" data-i="${i}" aria-label="В повторение">${mine.has(h) ? "✓" : "+"}</button></div>`).join("")}</div>
+        <button class="primary" id="addAll" style="margin-top:12px">📚 Все слова в словарь и повторение</button>` : ""}
+      <div class="actions" style="margin-top:10px"><button class="secondary" id="again">📷 Новый скан</button></div>`;
+    navBar("dict");
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = () => go(scanScreen, false);
+    bindTaps($app);
+    $app.querySelectorAll(".scan-wb").forEach(b => b.onclick = () => { haptic(); tapSheet(b.dataset.w); });
+    const pt = document.getElementById("pyT"); if (pt) pt.onclick = () => { const b = document.getElementById("pyB"); b.hidden = !b.hidden; pt.textContent = b.hidden ? "Показать пиньинь" : "Скрыть пиньинь"; };
+    const addList = async list => {
+      list = list.filter(x => x[2]);
+      if (!list.length) return;
+      const my = myWords(); list.forEach(([h, p, m]) => { if (!my.some(x => x[0] === h)) my.unshift([h, p, m, Date.now()]); }); store.set("my", my.slice(0, 500));
+      try { const r = await apiPost("add", { i: tg.initData, add: list.slice(0, 80) }, 8000);
+        if (r.status !== 200) throw new Error();
+        toast(list.length === 1 ? `«${list[0][0]}» — в словаре и повторении` : `Добавила ${list.length} ${plural(list.length, "слово", "слова", "слов")} в повторение 📚`);
+      } catch (e) { const pend = store.get("add", []); list.forEach(x => { if (!pend.some(y => y[0] === x[0])) pend.push(x.slice(0, 3)); }); store.set("add", pend.slice(-80)); toast("Сохранила — отправлю боту при следующем занятии"); }
+    };
+    $app.querySelectorAll(".scan-add").forEach(b => b.onclick = () => { if (b.classList.contains("on")) return; haptic(); b.classList.add("on"); b.textContent = "✓"; addList([res.words[+b.dataset.i]]); });
+    const aa = document.getElementById("addAll"); if (aa) aa.onclick = () => { haptic(); $app.querySelectorAll(".scan-add").forEach(b => { b.classList.add("on"); b.textContent = "✓"; }); addList(res.words.filter(w => !mine.has(w[0]))); };
+    document.getElementById("again").onclick = () => go(scanScreen, false);
+  }
+
   function myDictionary() {
     const list = myWords(), pend = store.get("add", []);
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
@@ -1933,5 +2055,5 @@
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
   }
   const VIEW = new URLSearchParams(location.search).get("v");
-  Promise.all([load(), fetchState()]).then(() => { setTimeout(loadExamples, 300); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
+  Promise.all([load(), fetchState()]).then(() => { setTimeout(loadExamples, 300); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
