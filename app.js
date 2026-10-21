@@ -1428,7 +1428,8 @@
       r.onerror = () => rej(new Error("read")); r.readAsDataURL(file);
     });
   }
-  const scanReady = () => !!(tg && tg.initData) && !S.demo;
+  const apiAuth = () => tg && tg.initData ? { i: tg.initData } : { k: S.tk || "" };
+  const scanReady = () => !!(tg && (tg.initData || S.tk)) && !S.demo;
   async function scanScreen() {
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <div class="scan-head"><div class="scan-dog">${chinaSVG("think")}</div>
@@ -1451,7 +1452,7 @@
     document.getElementById("sgo").onclick = () => { const t = document.getElementById("stxt").value.trim();
       if (!HAN.test(t)) return toast("Вставь текст с иероглифами"); doScan({ t }); };
     if (scanReady()) {
-      try { const r = await apiPost("scans", { i: tg.initData }, 6000);
+      try { const r = await apiPost("scans", apiAuth(), 6000);
         const box = document.getElementById("hist");
         if (box && r.status === 200 && r.data && r.data.list && r.data.list.length) {
           box.innerHTML = `<div class="label" style="margin-top:18px">Мои разборы</div><div class="list">${r.data.list.map(x =>
@@ -1464,7 +1465,7 @@
   async function openScan(sid) {
     if (!scanReady()) return toast("Открой приложение из бота");
     busy(true);
-    try { const r = await apiPost("scans", { i: tg.initData, id: sid }, 8000); busy(false);
+    try { const r = await apiPost("scans", Object.assign(apiAuth(), { id: sid }), 8000); busy(false);
       if (r.status === 200 && r.data && r.data.text) go(() => scanResult(r.data)); else toast("Разбор не найден");
     } catch (e) { busy(false); toast("Нет связи — попробуй ещё раз"); }
   }
@@ -1475,11 +1476,12 @@
       <p class="muted">Перевод, слова и грамматика — до минуты</p><div class="scan-bar"><i></i></div></div>`;
     dropNav();
     let r;
-    try { r = await apiPost("scan", Object.assign({ i: tg.initData }, body), 120000); }
+    try { r = await apiPost("scan", Object.assign(apiAuth(), body), 120000); }
     catch (e) { toast("Нет связи с ботом — попробуй ещё раз"); return go(scanScreen, false); }
     if (r.status === 200 && r.data && r.data.text) return go(() => scanResult(r.data), false);
     const er = r.data && r.data.error;
     if (er === "limit") return go(() => premiumScreen("scan"), false);
+    if (r.status === 401) { toast("Обнови приложение: напиши боту /start и открой его заново"); return go(scanScreen, false); }
     toast(er === "notext" ? "Не нашла китайского текста — сфотографируй крупнее и ровнее" : er === "cap" ? "На сегодня сканов достаточно — продолжим завтра 🐶"
       : r.status === 404 ? "Сканер появится после обновления бота" : "Не получилось разобрать — попробуй ещё раз");
     go(scanScreen, false);
@@ -1509,7 +1511,7 @@
       list = list.filter(x => x[2]);
       if (!list.length) return;
       const my = myWords(); list.forEach(([h, p, m]) => { if (!my.some(x => x[0] === h)) my.unshift([h, p, m, Date.now()]); }); store.set("my", my.slice(0, 500));
-      try { const r = await apiPost("add", { i: tg.initData, add: list.slice(0, 80) }, 8000);
+      try { const r = await apiPost("add", Object.assign(apiAuth(), { add: list.slice(0, 80) }), 8000);
         if (r.status !== 200) throw new Error();
         toast(list.length === 1 ? `«${list[0][0]}» — в словаре и повторении` : `Добавила ${list.length} ${plural(list.length, "слово", "слова", "слов")} в повторение 📚`);
       } catch (e) { const pend = store.get("add", []); list.forEach(x => { if (!pend.some(y => y[0] === x[0])) pend.push(x.slice(0, 3)); }); store.set("add", pend.slice(-80)); toast("Сохранила — отправлю боту при следующем занятии"); }
