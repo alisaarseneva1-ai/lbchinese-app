@@ -810,6 +810,7 @@
 
       <button class="wide w-jade" id="lifeW"><span class="round" style="background:rgba(255,255,255,.14)">${icon("globe")}</span><span class="grow"><span class="t">Китайский для жизни</span><br><span class="s" style="color:rgba(255,255,255,.7)">Китай, работа, бизнес, для себя — ролевые игры</span></span>${icon("chev", "i chev")}</button>
       <button class="wide w-scan" id="scanW"><span class="round" style="font-size:20px">📷</span><span class="grow"><span class="t">Сканер текста${lockMark("scan")}</span><br><span class="s">Фото китайского текста → перевод, слова и грамматика</span></span>${icon("chev", "i chev")}</button>
+      ${reviewsHtml()}
       <button class="wide" id="askT"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Спросить учителя</span><br><span class="s">Любой вопрос о китайском — ответ в чате</span></span>${icon("chev", "i chev")}</button>
       ${S.demo ? `<div class="foot">Демо-режим · открой приложение кнопкой в боте</div>` : ""}
     `;
@@ -831,6 +832,7 @@
     document.querySelectorAll("[data-club]").forEach(b => b.addEventListener("click", () => { haptic(); send({ t: "club", i: +b.dataset.club }); }));
     on("lifeW", () => go(lifeTab, false));
     on("scanW", needP("scan", () => go(scanScreen)));
+    on("rvAdd", () => feedbackSheet());
     on("pay", () => send({ t: "pay" }));
     let tap = 0;
     document.getElementById("dog").addEventListener("click", () => {
@@ -843,6 +845,16 @@
   }
 
   // миска Чины за сегодня: сыта, если был урок или повторение; косточка — мини-цель «ещё 5 минут»
+  // отзывы учеников (только с их согласия и после проверки командой) и настоящее число учеников
+  function reviewsHtml() {
+    const rv = Array.isArray(S.rvs) ? S.rvs : [], uc = +S.uc || 0;
+    const ucLine = uc >= 50 ? `Со мной учатся ${uc >= 1000 ? (Math.floor(uc / 100) * 100).toLocaleString("ru-RU") + "+" : uc} ${plural(uc, "ученик", "ученика", "учеников")}` : "";
+    if (!rv.length && !ucLine) return "";
+    return `<div class="rv-head"><b>Отзывы учеников</b>${ucLine ? `<span>${ucLine} 🐾</span>` : ""}</div>
+      ${rv.length ? `<div class="rv-row">${rv.map(([n, lv, r, t]) => `<div class="rv-card"><div class="rv-stars">${"★".repeat(Math.max(1, Math.min(5, r)))}</div>
+        <div class="rv-t">${esc(t)}</div><div class="rv-n">${esc(n)} · ${hsk(lv)}</div></div>`).join("")}</div>` : ""}
+      <button class="rv-add" id="rvAdd">💌 Оставить свой отзыв</button>`;
+  }
   function feedHtml() {
     const fed = S.fd || S.sd || S.done;
     return `<div class="feed"><span class="chip-f ${fed ? "on" : ""}">🥣 ${fed ? "Чина сыта" : "Миска ждёт урока"}</span>${S.bn
@@ -895,7 +907,7 @@
         <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Выбрать уровень самому</div><div class="s">Сейчас ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="pyset"><span class="i py-ic">拼</span><div class="grow"><div class="t">Пиньинь</div><div class="s" id="pyv">${PY_MODES[pyMode()]}</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">Мой словарь</div><div class="s">${myWords().length} ${plural(myWords().length, "слово", "слова", "слов")} из текстов и фраз</div></div>${icon("chev", "i chev")}</button>
-        <button class="item" id="fbk">${icon("ask")}<div class="grow"><div class="t">Оставить отзыв</div><div class="s">Видит только команда LinguaBridge</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="fbk">${icon("ask")}<div class="grow"><div class="t">Оставить отзыв</div><div class="s">Команде LinguaBridge — и другим ученикам, если разрешишь</div></div>${icon("chev", "i chev")}</button>
         ${PR ? `<button class="item" id="premI"><span class="i" style="font-size:20px;text-align:center">👑</span><div class="grow"><div class="t">Чина Премиум</div><div class="s">${PR.p ? "до " + fmtDate(PR.u) + (PR.sub ? " · автопродление" : "") : "бесплатная версия · от " + PR.m + " ⭐ в месяц"}</div></div>${icon("chev", "i chev")}</button>`
           : `<div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">бесплатно, без ограничений</div></div></div>`}
       </div>`;
@@ -2036,7 +2048,7 @@
     const bg = document.createElement("div"); bg.className = "backdrop";
     const draw = () => {
       bg.innerHTML = `<div class="sheet"><div class="grab"></div><div class="sheet-dog">${chinaSVG("love")}</div>
-        <h2 style="font-size:22px">Твой отзыв</h2><p class="muted small" style="margin-top:4px">Его увидит только команда LinguaBridge — другим ученикам он не виден.</p>
+        <h2 style="font-size:22px">Твой отзыв</h2><p class="muted small" style="margin-top:4px">Его увидит команда LinguaBridge. Другим ученикам покажем, только если ты разрешишь — бот спросит.</p>
         <div class="stars">${[1, 2, 3, 4, 5].map(i => `<button data-s="${i}" class="${i <= r ? "on" : ""}">★</button>`).join("")}</div>
         <textarea class="wr" id="fq" rows="4" placeholder="Что нравится, что улучшить, чего не хватает?"></textarea>
         <button class="primary" id="go" style="margin-top:12px">Отправить отзыв</button></div>`;
