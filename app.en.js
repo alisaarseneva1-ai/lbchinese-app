@@ -262,12 +262,17 @@
     } finally { if (t) clearTimeout(t); }
   }
   // открыто без ?s= — берём свежее состояние ученика с сервера
+  // со ссылкой ?s=… — тоже обновляем: в ссылке снимок на момент отправки кнопки (кнопка внизу чата может быть старой)
   async function fetchState() {
-    if (S !== DEMO || !tg || !tg.initData) return;
+    const fromLink = S !== DEMO, hasInit = !!(tg && tg.initData);
+    const auth = hasInit ? { i: tg.initData } : fromLink && S.tk ? { k: S.tk } : null;
+    if (!auth) return;
     try {
-      const r = await apiPost("state", { i: tg.initData }, 7000);
-      if (r.status === 200 && r.data && typeof r.data === "object") { S = Object.assign(r.data, { srv: 1 }); PR = S.pr && S.pr.on ? S.pr : null; }
-      else if (r.status === 404) S = Object.assign({}, DEMO, { neu: 1 });
+      const r = await apiPost("state", auth, fromLink ? 4000 : 7000);
+      if (r.status === 200 && r.data && typeof r.data === "object") {
+        S = fromLink ? Object.assign(r.data, S.srv ? { srv: 1 } : {}) : Object.assign(r.data, { srv: 1 });
+        PR = S.pr && S.pr.on ? S.pr : null;
+      } else if (r.status === 404 && !fromLink) S = Object.assign({}, DEMO, { neu: 1 });
     } catch (e) {}
   }
   let P = null, byLevel = {}, dictLevel = 0, dictQuery = "";
@@ -836,6 +841,18 @@
     on("bone", need(() => go(startBone)));
     on("rev", need(() => due ? go(startReview) : toast("New words will show up in review tomorrow")));
     on("talkC", need(() => talkSheet("china")));
+    // «Цели дня»: урок, повторение, разговор с Чиной — вставляем под карточку урока
+    const heroEl = document.querySelector(".hero");
+    if (heroEl && !S.demo) {
+      const goals = [["start", L("Урок дня", "Daily lesson"), !!S.done, "lesson"],
+        ["rev", L("Review", "Review"), (S.fd || 0) > 0, "review"],
+        ["talkC", L("Пара фраз Чине", "A few lines to Chína"), !!S.ch, "dog"]];
+      const nDone = goals.filter(g => g[2]).length;
+      heroEl.insertAdjacentHTML("afterend", `<div class="goals"><div class="goals-h"><b>${L("Цели дня", "Today's goals")}</b><span>${nDone === 3 ? L("Идеальный день! 完美", "Perfect day! 完美") : nDone + "/3"}</span></div>
+        <div class="goals-l">${goals.map(([id, t, ok, ic]) => `<button class="goal${ok ? " ok" : ""}" data-g="${id}">${ic === "dog" ? `<span class="gdog">${chinaSVG("happy")}</span>` : i3(ic, "i3x")}<span>${t}</span><i>${ok ? icon("check") : ""}</i></button>`).join("")}</div>
+        <div class="goals-bar"><u style="width:${Math.round(nDone / 3 * 100)}%"></u></div></div>`);
+      document.querySelectorAll("[data-g]").forEach(b => b.onclick = () => { haptic(); const t = document.getElementById(b.dataset.g); if (t) t.click(); });
+    }
     on("hskP", need(needP("exam", () => go(hskHub))));
     on("hskkP", need(needP("hskk", () => go(hskkHub))));
     on("askT", need(() => askSheet()));
