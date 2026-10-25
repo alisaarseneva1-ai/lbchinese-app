@@ -831,6 +831,24 @@ body::before{background:radial-gradient(380px 220px at 18% 30%,rgba(255,170,130,
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js"></script>
+<script>
+/* язык: выбор ученика (localStorage) → язык из бота (?s=…lg) → язык Telegram; app.js — RU, app.en.js — EN */
+(function () {
+  var l = null, ok = function (x) { return x === "ru" || x === "en"; };
+  try { l = localStorage.getItem("lb_lang"); } catch (e) {}
+  if (!ok(l)) try {
+    var q = new URLSearchParams(location.search).get("s");
+    if (q) { var b = atob(q.replace(/-/g, "+").replace(/_/g, "/")), u = new Uint8Array(b.length);
+      for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+      var st = JSON.parse(new TextDecoder().decode(u)); if (ok(st.lg)) l = st.lg; }
+  } catch (e) {}
+  if (!ok(l)) { var c = "";
+    try { c = Telegram.WebApp.initDataUnsafe.user.language_code || ""; } catch (e) {}
+    if (!c) c = navigator.language || "ru";
+    l = /^(ru|uk|be|kk|ky|uz|tg|hy|az|ka)\b/i.test(c) ? "ru" : "en"; }
+  document.documentElement.lang = l;
+  var s = document.createElement("script"); s.src = l === "en" ? "app.en.js" : "app.js"; document.body.appendChild(s);
+})();
+</script>
 </body>
 </html>

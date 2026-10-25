@@ -8,6 +8,14 @@
   const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData !== undefined
     ? window.Telegram.WebApp : null;
   const $app = document.getElementById("app");
+  // язык интерфейса и материалов: app.js — русская версия, app.en.js — английская (собирается tools/build_en.js)
+  const LANG = "ru";
+  const L = (ru, en) => LANG === "en" ? en : ru;
+  const setLang = l => {
+    try { localStorage.setItem("lb_lang", l); } catch (e) {}
+    try { if (tg && (tg.initData || S.tk)) apiPost("lang", Object.assign(apiAuth(), { l }), 4000).catch(() => {}); } catch (e) {}
+    setTimeout(() => location.reload(), 250);
+  };
   const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
   const hsk = lv => "HSK " + lv;
   // экзамен: для учебных уровней 7, 8, 9 он один — HSK 7–9 (в exams.json он хранится под уровнем 7)
@@ -921,7 +929,9 @@
     on("sty", () => toStory(storyImg(), SHARE.story));
     on("stk", () => openTg(S.sp || `https://t.me/${BOT_USER}?start=stickers`));
     on("lvset", levelSheet);
-    on("pyset", pinyinSheet);
+    const pys = document.getElementById("pyset");   // строка «Язык» — отдельно, чтобы не менять шаблон профиля
+    if (pys) pys.insertAdjacentHTML("afterend", `<button class="item" id="langset"><span class="i py-ic" style="font-size:13px">A文</span><div class="grow"><div class="t">${L("Язык", "Language")}</div><div class="s">${LANG === "en" ? "English" : "Русский"}</div></div>${icon("chev", "i chev")}</button>`);
+    on("pyset", pinyinSheet); on("langset", langSheet);
     on("myd", () => go(myDictionary));
     on("fbk", feedbackSheet);
     on("pay", () => send({ t: "pay" }));
@@ -977,6 +987,14 @@
   }
 
   // ---------- настройка пиньиня ----------
+  function langSheet() {
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">Язык · Language</h2>
+      <p class="muted small" style="margin-top:4px">${L("Интерфейс, уроки, примеры и ответы Чины будут на выбранном языке.", "The interface, lessons, examples and Chína's replies will be in this language.")}</p>
+      <div class="list" style="margin-top:14px">${[["ru", "Русский", "Russian"], ["en", "English", "Английский"]].map(([l, a, b]) => `<button class="item" data-lang="${l}"><div class="grow"><div class="t">${a}</div><div class="s">${b}</div></div>${l === LANG ? icon("check", "i chev") : ""}</button>`).join("")}</div></div>`;
+    bg.querySelectorAll("[data-lang]").forEach(b => b.onclick = e => { e.stopPropagation(); haptic("success"); if (b.dataset.lang === LANG) { bg.remove(); return; } b.querySelector(".s").textContent = "…"; setLang(b.dataset.lang); });
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
+  }
   function pinyinSheet() {
     const bg = document.createElement("div"); bg.className = "backdrop";
     const INFO = { all: "Пиньинь под каждым словом и предложением — как раньше",
@@ -1367,7 +1385,7 @@
   }
   // каждое отправление боту уносит с собой накопленные слова и непроверенные тексты
   function withPending(payload) {
-    const out = Object.assign({}, payload);
+    const out = Object.assign({}, payload, { lg: LANG });
     const add = store.get("add", []), wq = store.get("wq", []);
     if (add.length && !out.add) out.add = add.slice(0, 60);
     if (wq.length && !out.w) out.wq = wq.slice(0, 3);
