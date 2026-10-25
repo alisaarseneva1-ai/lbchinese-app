@@ -1398,10 +1398,57 @@
         + (arr.length > shown.length ? `<p class="center muted small" style="padding:16px">Ещё ${arr.length - shown.length} — уточни поиск</p>` : "")
         + (!arr.length ? `<p class="center muted" style="padding:32px">Ничего не нашлось</p>` : "");
       document.querySelectorAll(".entry").forEach(el => el.onclick = () => wordSheet(word(el.dataset.h)));
+      bigDict(raw, new Set(shown.map(w => w.h)));
     };
     input.oninput = () => { dictQuery = input.value; render(); };
     document.querySelectorAll(".tab").forEach(b => b.onclick = () => { dictLevel = +b.dataset.l; haptic(); dictionary(); });
     render();
+  }
+  // ---------- большой словарь: поиск на сервере (≈3 млн статей, примеры) ----------
+  let bigT = 0, bigSeq = 0;
+  const BK_SRC = "";
+  function bigDict(raw, have) {
+    clearTimeout(bigT);
+    const box = document.getElementById("list"); if (!box) return;
+    let el = document.getElementById("big");
+    if (!el) { el = document.createElement("div"); el.id = "big"; box.after(el); }
+    if (!raw) { el.innerHTML = ""; return; }
+    el.innerHTML = `<p class="center muted small" style="padding:10px">${L("Ищу в большом словаре…", "Searching the big dictionary…")}</p>`;
+    const my = ++bigSeq;
+    bigT = setTimeout(async () => {
+      let r = null;
+      try { r = await apiPost("dict", { q: raw }, 8000); } catch (e) {}
+      if (my !== bigSeq || !document.getElementById("big")) return;
+      const rows = r && r.status === 200 && r.data && Array.isArray(r.data.r) ? r.data.r.filter(x => !have.has(x[0])) : [];
+      if (!rows.length) { el.innerHTML = r && r.data && r.data.on === 0 ? "" : (have.size ? "" : `<p class="center muted small" style="padding:10px">${L("В большом словаре тоже не нашлось", "Not found in the big dictionary either")}</p>`); return; }
+      const nf = box.querySelector(".center.muted"); if (nf && !have.size) nf.remove();
+      el.innerHTML = `<div class="label" style="margin:14px 2px 6px">${L("Большой словарь", "Big dictionary")}</div>` +
+        rows.map(([h, p, m]) => `<button class="entry bk" data-bk="${esc(h)}"><span class="h zh">${esc(h)}</span><span>${p ? pyH(p, "p", true) : ""}<div class="m">${esc(m)}</div></span></button>`).join("") + BK_SRC;
+      el.querySelectorAll("[data-bk]").forEach(b => b.onclick = () => { haptic(); bkrsSheet(b.dataset.bk); });
+      bindLinks(el);
+    }, 350);
+  }
+  async function bkrsSheet(h) {
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    bg.innerHTML = `<div class="sheet"><div class="grab"></div><div class="big zh center">${esc(h)}</div><p class="center muted small">${L("Загружаю статью…", "Loading the entry…")}</p></div>`;
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
+    let r = null;
+    try { r = await apiPost("dict", { h }, 10000); } catch (e) {}
+    const d = r && r.status === 200 && r.data && !r.data.error ? r.data : null;
+    const sheet = bg.querySelector(".sheet"); if (!sheet) return;
+    if (!d) { sheet.innerHTML = `<div class="grab"></div><div class="big zh center">${esc(h)}</div><p class="center muted">${L("Не получилось загрузить — попробуй ещё раз", "Couldn't load it, please try again")}</p>`; return; }
+    const local = word(h);
+    const first = (d.e[0] || {});
+    const shortM = (local && local.m) || (first.html || "").replace(/<span class="ex">[\s\S]*?<\/span>/g, " ").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+    sheet.innerHTML = `<div class="grab"></div><div class="big zh center" style="font-size:${h.length > 4 ? 40 : 64}px">${esc(h)}</div>
+      ${d.e.map(e => `<div class="bk-ent">${e.py ? pyH(e.py, "py", true) : ""}<div class="bk-html">${e.html}</div></div>`).join("")}
+      <div class="row" style="gap:8px;margin-top:12px"><button class="sound" id="say" style="flex:1">${icon("sound")}${L("Послушать", "Listen")}</button><button class="primary" id="learnB" style="flex:1.4;margin:0">${L("Учить: в повторение", "Learn: add to review")}</button></div>
+      ${d.x.length ? `<div class="label" style="margin:16px 0 6px">${L("Примеры", "Examples")}</div>${d.x.map(([zh, py, ru]) => `<div class="gex"><button class="sound-mini" data-say="${esc(zh)}">${icon("sound")}</button><div><div class="zh">${esc(zh)}</div>${py ? pyH(py) : ""}<div class="small muted">${esc(ru)}</div></div></div>`).join("")}` : ""}
+      ${BK_SRC}`;
+    sheet.querySelector("#say").onclick = e => { e.stopPropagation(); speak(h); };
+    sheet.querySelectorAll("[data-say]").forEach(b => b.onclick = e => { e.stopPropagation(); speak(b.dataset.say); });
+    sheet.querySelector("#learnB").onclick = e => { e.stopPropagation(); learnWord(h, first.py || (local && local.p) || "", shortM); haptic("success"); };
+    bindLinks(sheet);
   }
   function wordSheet(w) {
     const l = lesson(w.lv, w.day);
