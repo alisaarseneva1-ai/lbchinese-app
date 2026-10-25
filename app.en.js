@@ -861,6 +861,7 @@
     on("talkC", need(() => talkSheet("china")));
     // «Цели дня»: урок, повторение, разговор с Чиной — вставляем под карточку урока
     const heroEl = document.querySelector(".hero");
+    setTimeout(() => consentGate(), 400);
     const rsl = resumeList();
     if (heroEl && rsl.length) { heroEl.insertAdjacentHTML("beforebegin", resumeHtml(rsl)); bindResume(rsl, toHome); }
     if (heroEl && !S.demo) {
@@ -975,7 +976,9 @@
     if (pys) pys.insertAdjacentHTML("afterend", `<button class="item" id="langset"><span class="i py-ic" style="font-size:13px">A文</span><div class="grow"><div class="t">${L("Язык", "Language")}</div><div class="s">${LANG === "en" ? "English" : "Русский"}</div></div>${icon("chev", "i chev")}</button>`);
     const lset = document.getElementById("langset");
     if (lset) lset.insertAdjacentHTML("afterend", `<button class="item" id="lgP">${i3("crown", "i3x")}<div class="grow"><div class="t">${L("Соревнования и стаи", "Competitions and packs")}</div><div class="s">${L("Рейтинг недели, друзья, стая", "Weekly league, friends, your pack")}</div></div>${icon("chev", "i chev")}</button>`);
-    on("pyset", pinyinSheet); on("langset", langSheet); on("lgP", () => go(leagueScreen));
+    const lgp = document.getElementById("lgP") || document.getElementById("langset");
+    if (lgp) lgp.insertAdjacentHTML("afterend", `<button class="item" id="docsP"><span class="i py-ic" style="font-size:15px">§</span><div class="grow"><div class="t">${L("Документы", "Documents")}</div><div class="s">${L("Соглашение, конфиденциальность, согласия", "Terms, privacy, consents")}</div></div>${icon("chev", "i chev")}</button>`);
+    on("pyset", pinyinSheet); on("langset", langSheet); on("lgP", () => go(leagueScreen)); on("docsP", docsSheet);
     on("myd", () => go(myDictionary));
     on("fbk", feedbackSheet);
     on("pay", () => send({ t: "pay" }));
@@ -1028,6 +1031,9 @@
     on("buyY", () => buyStars("y")); on("buyM", () => buyStars("m"));
     const openPay = u => { haptic(); if (/^https:\/\/t\.me\//.test(u)) openTg(u); else if (tg && tg.openLink) tg.openLink(u); else window.open(u, "_blank"); };
     on("trM", () => openPay(PR.tm)); on("trY", () => openPay(PR.ty));
+    const ft = $app.querySelector(".foot");
+    if (ft) { ft.insertAdjacentHTML("beforebegin", `<p class="small muted center" style="margin:14px 0 0">${L("Оплачивая подписку, ты принимаешь ", "By paying, you accept the ")}<a href="#" data-doc="terms">${L("условия оферты", "Terms of Service")}</a>${L(". Месячная подписка Stars продлевается автоматически, отключить — /pay.", ". The monthly Stars subscription renews automatically; turn it off with /pay.")}</p>`);
+      $app.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); openDoc(x.dataset.doc); }); }
   }
 
   // ---------- настройка пиньиня ----------
@@ -1438,6 +1444,7 @@
   // каждое отправление боту уносит с собой накопленные слова и непроверенные тексты
   function withPending(payload) {
     const out = Object.assign({}, payload, { lg: LANG });
+    const lgl = store.get("legal", null); if (lgl && !lgl.sent) out.cs = [lgl.v, lgl.ads];
     const add = store.get("add", []), wq = store.get("wq", []);
     if (add.length && !out.add) out.add = add.slice(0, 60);
     if (wq.length && !out.w) out.wq = wq.slice(0, 3);
@@ -1515,6 +1522,56 @@
   }
   const apiAuth = () => tg && tg.initData ? { i: tg.initData } : { k: S.tk || "" };
   const scanReady = () => !!(tg && (tg.initData || S.tk)) && !S.demo;
+  // ---------- Документы и согласия (152-ФЗ, ст. 18 «О рекламе») ----------
+  // LEGAL_V — версия документов: при изменении текстов увеличить, и ученик подтвердит согласие заново
+  const LEGAL_V = "1.0";
+  const legalUrl = k => new URL(`legal/${k}${LANG === "en" ? ".en" : ""}.html`, location.href).href;
+  const openDoc = k => { haptic(); const u = legalUrl(k); if (tg && tg.openLink) tg.openLink(u); else window.open(u, "_blank", "noopener"); };
+  const DOCS = [["terms", L("Пользовательское соглашение и оферта", "Terms of Service")], ["privacy", L("Политика конфиденциальности", "Privacy Policy")],
+    ["consent", L("Согласие на обработку персональных данных", "Data Processing Consent")], ["ads", L("Согласие на рассылки", "Promotions Consent")]];
+  const legalLocal = () => store.get("legal", null);
+  const legalOk = () => S.cv === LEGAL_V || ((legalLocal() || {}).v === LEGAL_V);
+  async function sendConsent(v, ads) {
+    const rec = { v, ads: ads ? 1 : 0, ts: Date.now(), sent: 0 };
+    store.set("legal", rec);
+    const auth = tg && tg.initData ? { i: tg.initData } : S.tk ? { k: S.tk } : null;
+    if (!auth || S.demo) return;
+    try { const r = await apiPost("consent", Object.assign(auth, { v, ads: rec.ads }), 8000);
+      if (r.status === 200) { rec.sent = 1; store.set("legal", rec); S.cv = v; S.ads = rec.ads; } } catch (e) {}
+  }
+  function consentGate(done) {
+    if (S.demo || legalOk()) return done && done();
+    document.querySelectorAll(".backdrop.legal").forEach(x => x.remove());
+    const bg = document.createElement("div"); bg.className = "backdrop legal";
+    const link = (k, t) => `<a href="#" data-doc="${k}">${t}</a>`;
+    bg.innerHTML = `<div class="sheet legal-sheet"><div class="sheet-dog">${chinaSVG("joy")}</div>
+      <h2 style="font-size:22px">${L("Пара формальностей", "A couple of formalities")}</h2>
+      <p class="muted small" style="margin:4px 0 12px">${L("Чтобы Чина сохраняла твой прогресс и проверяла ответы, нам нужно твоё согласие. Это займёт секунду.", "So Chína can save your progress and check your answers, we need your consent. It takes a second.")}</p>
+      <label class="chk"><input type="checkbox" id="lgT"><span>${L("Принимаю ", "I accept the ")}${link("terms", L("Пользовательское соглашение", "Terms of Service"))}${L(" и ознакомлен(а) с ", " and have read the ")}${link("privacy", L("Политикой конфиденциальности", "Privacy Policy"))}</span></label>
+      <label class="chk"><input type="checkbox" id="lgC"><span>${L("Даю ", "I give my ")}${link("consent", L("согласие на обработку персональных данных", "consent to the processing of my personal data"))}</span></label>
+      <label class="chk opt"><input type="checkbox" id="lgA"><span>${L("Хочу получать новости, скидки и анонсы клубов в Telegram (", "I'd like news, discounts and club announcements in Telegram (")}${link("ads", L("согласие на рассылки", "promotions consent"))}${L("). Необязательно", "). Optional")}</span></label>
+      <button class="primary" id="lgGo" disabled style="margin-top:14px">${L("Продолжить", "Continue")}</button>
+      <p class="small muted center" style="margin-top:8px">${L("Мне есть 14 лет, или согласие даёт мой родитель", "I'm 14 or older, or my parent gives consent for me")}</p></div>`;
+    document.body.appendChild(bg);
+    const t = bg.querySelector("#lgT"), c = bg.querySelector("#lgC"), a = bg.querySelector("#lgA"), go_ = bg.querySelector("#lgGo");
+    const upd = () => { go_.disabled = !(t.checked && c.checked); };
+    t.onchange = upd; c.onchange = upd;
+    bg.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); e.stopPropagation(); openDoc(x.dataset.doc); });
+    go_.onclick = () => { if (go_.disabled) return; haptic("success"); sendConsent(LEGAL_V, a.checked); bg.remove(); if (done) done(); };
+  }
+  function docsSheet() {
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    const ads = S.ads === 1 || (legalLocal() || {}).ads === 1;
+    bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">${L("Документы", "Documents")}</h2>
+      <div class="list" style="margin-top:12px">${DOCS.map(([k, t]) => `<button class="item" data-doc="${k}"><div class="grow"><div class="t">${t}</div></div>${icon("chev", "i chev")}</button>`).join("")}</div>
+      <label class="chk" style="margin-top:14px"><input type="checkbox" id="adsT" ${ads ? "checked" : ""}><span>${L("Рассылки: новости, скидки и анонсы клубов", "Promotions: news, discounts and club announcements")}</span></label>
+      <p class="small muted" style="margin-top:10px">${L("Удалить все свои данные можно командой /deleteme в чате с ботом. Напоминания о занятиях настраиваются командой /reminders.", "You can delete all your data with the /deleteme command in the bot chat. Study reminders are set with /reminders.")}</p></div>`;
+    bg.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.stopPropagation(); openDoc(x.dataset.doc); });
+    const at = bg.querySelector("#adsT");
+    at.onchange = () => { sendConsent((legalLocal() || {}).v || S.cv || LEGAL_V, at.checked); toast(at.checked ? L("Рассылки включены", "Promotions on") : L("Рассылки выключены", "Promotions off")); };
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
+  }
+
   // ---------- «Продолжить с того места»: незаконченный урок, экзамен или разбор ошибок ----------
   const FRESH = 24 * 3600000;
   function payloadFrom(b) {
