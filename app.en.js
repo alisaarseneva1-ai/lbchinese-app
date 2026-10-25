@@ -1563,7 +1563,14 @@
     else {
       try { const r = await apiPost("league", auth, 8000); if (r.status === 200 && r.data) LG = r.data; } catch (e) {}
       if (tok !== seqTok) return;
-      if (!LG) { $app.innerHTML = `${back}<div class="paper">${L("No connection — please try again", "No connection, please try again")}</div>`; return; }
+      if (!LG) {
+        $app.innerHTML = `${back}<div class="paper" style="margin-top:6vh"><div class="sheet-dog">${chinaSVG("think")}</div><h2 style="margin:6px 0 8px">${lgName()}</h2>
+          <p class="muted">${L("Чина не смогла получить рейтинг с сервера. Проверь интернет и попробуй ещё раз — если не помогает, значит бот ещё обновляется.", "Chína couldn't load the league from the server. Check your connection and try again; if that doesn't help, the bot is still updating.")}</p></div>
+          <div class="actions"><button class="primary" id="lgRetry">${L("Попробовать ещё раз", "Try again")}</button></div>`;
+        const bk0 = document.getElementById("bk"); if (bk0) bk0.onclick = goBack;
+        document.getElementById("lgRetry").onclick = () => { haptic(); leagueScreen(); };
+        return;
+      }
     }
     drawLeague();
   }
