@@ -1561,11 +1561,15 @@
     const auth = apiAuth();
     if (S.demo || (!auth.i && !auth.k)) { LG = LG || { me: { xp: 0, pl: null, n: 0 }, top: [], fr: [], clan: null, clans: [], left: 7, demo: 1 }; }
     else {
-      try { const r = await apiPost("league", auth, 8000); if (r.status === 200 && r.data) LG = r.data; } catch (e) {}
+      let why = "";
+      try { const r = await apiPost("league", auth, 8000); if (r.status === 200 && r.data) LG = r.data; else why = "HTTP " + r.status + (auth.i ? " i" : auth.k ? " k" : " –") + (r.data && r.data.msg ? " · " + r.data.msg : ""); }
+      catch (e) { why = "net " + (auth.i ? "i" : auth.k ? "k" : "–"); }
       if (tok !== seqTok) return;
       if (!LG) {
         $app.innerHTML = `${back}<div class="paper" style="margin-top:6vh"><div class="sheet-dog">${chinaSVG("think")}</div><h2 style="margin:6px 0 8px">${lgName()}</h2>
-          <p class="muted">${L("Чина не смогла получить рейтинг с сервера. Проверь интернет и попробуй ещё раз — если не помогает, значит бот ещё обновляется.", "Chína couldn't load the league from the server. Check your connection and try again; if that doesn't help, the bot is still updating.")}</p></div>
+          <p class="muted">${L("Чина не смогла получить рейтинг с сервера. Проверь интернет и попробуй ещё раз — если не помогает, значит бот ещё обновляется.", "Chína couldn't load the league from the server. Check your connection and try again; if that doesn't help, the bot is still updating.")}</p>
+          ${!auth.i && !auth.k ? `<p class="small" style="margin-top:8px">${L("Похоже, кнопка в чате устарела: напиши боту /menu и открой приложение новой кнопкой.", "The chat button looks outdated: send /menu to the bot and open the app with the new button.")}</p>` : ""}
+          <p class="small muted" style="margin-top:8px">${esc(why)}</p></div>
           <div class="actions"><button class="primary" id="lgRetry">${L("Попробовать ещё раз", "Try again")}</button></div>`;
         const bk0 = document.getElementById("bk"); if (bk0) bk0.onclick = goBack;
         document.getElementById("lgRetry").onclick = () => { haptic(); leagueScreen(); };
