@@ -864,6 +864,8 @@
     setTimeout(() => consentGate(), 400);
     const rsl = resumeList();
     if (heroEl && rsl.length) { heroEl.insertAdjacentHTML("beforebegin", resumeHtml(rsl)); bindResume(rsl, toHome); }
+    const urg = urgency();
+    if (heroEl && urg) { heroEl.insertAdjacentHTML("beforebegin", urgencyHtml(urg)); const ub = document.getElementById("urgB"); if (ub) ub.onclick = () => { haptic(); go(() => premiumScreen()); }; tickUrgency(); }
     if (heroEl && !S.demo) {
       const goals = [["start", L("Урок дня", "Daily lesson"), !!S.done, "lesson"],
         ["rev", L("Повторение", "Review"), (S.fd || 0) > 0, "review"],
@@ -878,6 +880,15 @@
     if (goalsEl) {
       goalsEl.insertAdjacentHTML("afterend", `<button class="lg-entry" id="lgE">${i3("crown", "i3r")}<span class="grow"><b>${L("Соревнования недели", "Weekly competitions")}</b><small>${L("Рейтинг, друзья и стаи · призы каждый понедельник", "League, friends and packs · prizes every Monday")}</small></span>${icon("chev", "i chev")}</button>`);
       const le = document.getElementById("lgE"); if (le) le.onclick = () => { haptic(); go(leagueScreen); };
+      if (!S.demo && P && P.lessons) {
+        const leEl = document.getElementById("lgE");
+        if (leEl) leEl.insertAdjacentHTML("afterend", goalHtml() + tryHtml());
+        const gs = document.getElementById("goalShare");
+        if (gs) gs.onclick = () => shareText(L(`Учу китайский с Чиной 🐶 Цель — ${hsk(S.l)} за ${LEVEL_WEEKS(S.l)} ${plural(LEVEL_WEEKS(S.l), "неделю", "недели", "недель")}: уже ${known(S.l)} из ${size(S.l)} слов и ${S.s || 0} ${plural(S.s || 0, "день", "дня", "дней")} подряд. Присоединяйся!`,
+          `I'm learning Chinese with Chína 🐶 Goal: ${hsk(S.l)} in ${LEVEL_WEEKS(S.l)} weeks. ${known(S.l)} of ${size(S.l)} words so far and a ${S.s || 0}-day streak. Join me!`));
+        const tb = document.getElementById("tryB");
+        if (tb) tb.onclick = () => { haptic(); const t = TRY.find(x => x[0] === tb.dataset.k); markSeen(tb.dataset.k); if (t) t[4](); };
+      }
     }
     on("hskP", need(needP("exam", () => go(hskHub))));
     on("hskkP", need(needP("hskk", () => go(hskkHub))));
@@ -1031,6 +1042,14 @@
     on("buyY", () => buyStars("y")); on("buyM", () => buyStars("m"));
     const openPay = u => { haptic(); if (/^https:\/\/t\.me\//.test(u)) openTg(u); else if (tg && tg.openLink) tg.openLink(u); else window.open(u, "_blank"); };
     on("trM", () => openPay(PR.tm)); on("trY", () => openPay(PR.ty));
+    const urgP = urgency(), headP = $app.querySelector(".prem-head");
+    if (urgP && headP) { headP.insertAdjacentHTML("afterend", urgencyHtml(urgP).replace('id="urgB"', 'id="urgP"')); tickUrgency(); }
+    // тариф «3 месяца»: картой (если в Tribute есть товар) и звёздами
+    const rubQ = PR.tpq || PR.rq;
+    const trYb = document.getElementById("trY");
+    if (PR.tq && trYb) { trYb.insertAdjacentHTML("afterend", `<button class="plan" id="trQ"><span class="tag tag-q">${L("Попробовать всерьёз", "A serious try")}</span><b>${L("3 месяца картой", "3 months by card")}</b><span class="price">${rub(rubQ)}</span><small>≈${rub(Math.round(rubQ / 3))}${L("/мес · без автосписаний", "/mo · no auto-renewal")}</small></button>`); on("trQ", () => openPay(PR.tq)); }
+    const buyYb = document.getElementById("buyY");
+    if (PR.q && buyYb) { buyYb.insertAdjacentHTML("afterend", `<button class="plan" id="buyQ"><span class="tag tag-q">${L(`Выгоднее на ${PR.sq}%`, `Save ${PR.sq}%`)}</span><b>${L("3 месяца", "3 months")}</b><span class="price">${st(PR.q)}</span><small>≈${rub(PR.rq)} · ≈${rub(Math.round(PR.rq / 3))}${L("/мес · ровно на уровень HSK", "/mo · just right for one HSK level")}</small></button>`); on("buyQ", () => buyStars("q")); }
     const ft = $app.querySelector(".foot");
     if (ft) { ft.insertAdjacentHTML("beforebegin", `<p class="small muted center" style="margin:14px 0 0">${L("Оплачивая подписку, ты принимаешь ", "By paying, you accept the ")}<a href="#" data-doc="terms">${L("условия оферты", "Terms of Service")}</a>${L(". Месячная подписка Stars продлевается автоматически, отключить — /pay.", ". The monthly Stars subscription renews automatically; turn it off with /pay.")}</p>`);
       $app.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); openDoc(x.dataset.doc); }); }
@@ -1081,7 +1100,7 @@
   }
 
   // ---------- разговор с Чиной ----------
-  function talkSheet(who) {
+  function talkSheet(who) { markSeen("talk");
     let pick = S.tl || 0;
     const P_ = PARTNER[who];
     const bg = document.createElement("div"); bg.className = "backdrop";
@@ -1170,7 +1189,8 @@
     const exLite = extra ? { after: extra.after, note: extra.note } : null;
     if (snap) { i = snap.i || 0; score = snap.score || 0; mistakes.push(...(snap.mistakes || [])); results.push(...(snap.results || []));
       gres.push(...(snap.gres || [])); Object.assign(secs, snap.secs || {}); streak = snap.streak || 0; }
-    const saveRun = () => { if (!base) return; try { store.set("run", { steps, i, score, mistakes, results, gres, secs, streak, label, coach, base, ex: exLite, ts: Date.now() }); } catch (e) {} };
+    const saveRun = () => { if (!base) return; try { store.set("run", { steps, i, score, mistakes, results, gres, secs, streak, label, coach, base, ex: exLite, ts: Date.now() }); } catch (e) {}
+      if (i > 0) syncProgress({ k: base.t, lb: label, i: steps.slice(0, i).filter(x => x.type === "q").length + 1, n: steps.filter(x => x.type === "q").length, lv: base.l || S.l, d: base.d || 0 }); };
     const draw = () => {
       const s = steps[i]; if (!s) return finish();
       saveRun();
@@ -1328,7 +1348,7 @@
       document.getElementById("x").onclick = () => { stopSeq(); testTok++; toast(L("Сохранила место — продолжишь с этого задания", "Saved, you'll continue from this task")); toHome(); };
     };
     const finish = () => {
-      store.set("run", null);
+      store.set("run", null); syncProgress(null);
       const pct = total ? score / total : 1;
       const [ch, word_] = pct >= .9 ? ["优", "Отлично"] : pct >= .6 ? ["良", "Хорошо"] : ["练", "Нужно потренироваться"];
       $app.innerHTML = `<div class="paper" style="margin-top:9vh"><div class="stamp">${ch}</div>
@@ -1356,7 +1376,7 @@
   }
 
   // ---------- словарь ----------
-  function dictionary() {
+  function dictionary() { markSeen("dict");
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <h2 style="font-size:24px;margin-bottom:12px">Словарь</h2>
       <button class="wide w-scan" id="scanD" style="margin:0 0 12px"><span class="round r3d">${i3("scan", "i3r")}</span><span class="grow"><span class="t">Сканер текста${lockMark("scan")}</span><br><span class="s">Сфотографируй текст — переведу и разберу</span></span>${icon("chev", "i chev")}</button>
@@ -1569,6 +1589,68 @@
   }
   const apiAuth = () => tg && tg.initData ? { i: tg.initData } : { k: S.tk || "" };
   const scanReady = () => !!(tg && (tg.initData || S.tk)) && !S.demo;
+  // ---------- рост: цель уровня, срочность, «Попробуй сегодня», поделиться ----------
+  const markSeen = k => { try { const s_ = store.get("seen_f", {}); if (!s_[k]) { s_[k] = Date.now(); store.set("seen_f", s_); } } catch (e) {} };
+  const LEVEL_WEEKS = lv => { let w = 0; Object.values(P.lessons).forEach(l => { if (l.lv === lv && l.week > w) w = l.week; }); return w || 1; };
+  const wordsUpTo = lv => LEVELS.filter(x => x <= lv).reduce((n, x) => n + size(x), 0);
+  function goalHtml() {
+    const lv = S.l || 1, l = lesson(lv, S.d), wk = l ? l.week : 1, W = LEVEL_WEEKS(lv);
+    const k = Math.min(known(lv), size(lv)), left = Math.max(0, W - wk + 1);
+    const pct = Math.round(Math.min(1, (wk - 1) / W) * 100);
+    return `<div class="goal-card"><div class="goal-top">${i3("exam", "i3r")}<div class="grow"><div class="eyebrow">${L("Твоя цель", "Your goal")}</div>
+      <b>${L(`${hsk(lv)} за ${W} ${plural(W, "неделю", "недели", "недель")}`, `${hsk(lv)} in ${W} weeks`)}</b>
+      <small>${L(`Неделя ${wk} из ${W} · ${k} из ${size(lv)} слов · осталось ≈${left} ${plural(left, "неделя", "недели", "недель")}`, `Week ${wk} of ${W} · ${k} of ${size(lv)} words · ≈${left} weeks left`)}</small></div></div>
+      <div class="goal-bar"><u style="width:${Math.max(4, pct)}%"></u></div>
+      <p class="small muted" style="margin:8px 0 0">${L(`${size(lv)} слов ${hsk(lv)} с интервальным повторением: слово возвращается, пока не запомнишь. С нуля до ${hsk(lv)} — ${wordsUpTo(lv)} слов.`, `${size(lv)} ${hsk(lv)} words with spaced repetition: a word comes back until you remember it. From zero to ${hsk(lv)}: ${wordsUpTo(lv)} words.`)}</p>
+      <button class="secondary goal-share" id="goalShare">${L("Поделиться прогрессом", "Share my progress")}</button></div>`;
+  }
+  const FREE_K = ["trial", "founder", "gift", "ref"];
+  const fmtLeft = ms => { const s_ = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s_ / 86400), h = Math.floor(s_ % 86400 / 3600), m = Math.floor(s_ % 3600 / 60), sec = s_ % 60;
+    return d ? L(`${d} д ${h} ч ${m} мин`, `${d}d ${h}h ${m}m`) : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`; };
+  function urgency() {
+    if (!PR) return null;
+    const now = Date.now();
+    if (PR.of && !PR.p) { const t = Date.parse(PR.of); if (t > now) return { t, kind: "offer",
+      title: L(`Только для тебя: 3 месяца со скидкой ${PR.ofp || 30}%`, `Just for you: 3 months ${PR.ofp || 30}% off`),
+      sub: L("Персональное предложение после пробного периода. Закончится через", "A personal offer after your trial. Ends in") }; }
+    if (PR.p && !PR.sub && FREE_K.includes(PR.k) && PR.u) { const t = Date.parse(PR.u + "T23:59:59"); if (t > now && t - now < 3 * 86400000) return { t, kind: "trial",
+      title: L("Бесплатный Премиум скоро закончится", "Your free Premium ends soon"),
+      sub: L("Экзамены, сканер, голосовые и Чина без лимита закроются через", "Exams, the scanner, voice and unlimited Chína lock in") }; }
+    return null;
+  }
+  function urgencyHtml(u) {
+    return `<button class="urg ${u.kind}" id="urgB"><span class="grow"><b>${u.title}</b><small>${u.sub} <span class="urg-t" data-t="${u.t}">${fmtLeft(u.t - Date.now())}</span></small></span><span class="go-s">${L("Сохранить доступ", "Keep access")}</span></button>`;
+  }
+  let urgTimer = 0;
+  function tickUrgency() {
+    clearInterval(urgTimer);
+    urgTimer = setInterval(() => { const els = document.querySelectorAll(".urg-t"); if (!els.length) { clearInterval(urgTimer); return; }
+      els.forEach(el => { el.textContent = fmtLeft(+el.dataset.t - Date.now()); }); }, 1000);
+  }
+  const TRY = [
+    ["scan", "scan", L("Сканер текста", "Text scanner"), L("Сфотографируй вывеску, меню или страницу учебника — Чина переведёт и разберёт каждое слово.", "Snap a sign, a menu or a textbook page: Chína translates it and explains every word."), () => can("scan") ? go(scanScreen) : go(() => premiumScreen("scan"))],
+    ["oral", "oral", L("Устный экзамен", "Speaking exam"), L("Ответь голосом на задание HSKK — Чина оценит произношение и тоны.", "Answer an HSKK task by voice: Chína rates your pronunciation and tones."), () => go(can("hskk") ? hskkHub : () => premiumScreen("hskk"))],
+    ["exam", "exam", L("Пробный экзамен HSK 3.0", "HSK 3.0 mock exam"), L("Проверь себя на настоящем формате с таймером — узнаешь, сколько баллов набрал бы сегодня.", "Try the real format with a timer and see what score you'd get today."), () => go(can("exam") ? hskHub : () => premiumScreen("exam"))],
+    ["life", "life", L("Ролевая игра с Чиной", "Role-play with Chína"), L("Закажи кофе, поторгуйся на рынке или пройди собеседование — Чина подыграет.", "Order coffee, bargain at a market or ace a job interview: Chína plays along."), () => go(lifeTab, false)],
+    ["league", "crown", L("Соревнования и стаи", "Competitions and packs"), L("Собери стаю с друзьями и обгоните другие команды — призы каждый понедельник.", "Build a pack with friends and beat other teams: prizes every Monday."), () => go(leagueScreen)],
+    ["dict", "dict", L("Большой словарь", "Big dictionary"), L("Миллионы слов и фраз с примерами — найди любое слово по-китайски, пиньинем или по-русски.", "Millions of words and phrases with examples: search in Chinese, pinyin or English."), () => go(dictionary, false)],
+    ["ask", "teacher", L("Спроси учителя", "Ask the teacher"), L("Непонятное правило? Учитель-ИИ объяснит с примерами за минуту.", "A rule doesn't make sense? The AI teacher explains it with examples in a minute."), () => askSheet()],
+  ];
+  function tryHtml() {
+    const seen = store.get("seen_f", {});
+    const list = TRY.filter(x => !seen[x[0]]);
+    if (!list.length) return "";
+    const day = Math.floor(Date.now() / 86400000), t = list[day % list.length];
+    return `<button class="try-card" id="tryB" data-k="${t[0]}">${i3(t[1], "i3r")}<span class="grow"><span class="eyebrow">${L("Попробуй сегодня", "Try today")}</span><b>${t[2]}</b><small>${t[3]}</small></span>${icon("chev", "i chev")}</button>`;
+  }
+  // ход урока — на сервер, чтобы Чина напомнила, где ученик остановился
+  let progT = 0;
+  function syncProgress(data) {
+    clearTimeout(progT);
+    progT = setTimeout(() => { const auth = tg && tg.initData ? { i: tg.initData } : S.tk ? { k: S.tk } : null;
+      if (auth && !S.demo) apiPost("progress", Object.assign(auth, { p: data }), 6000).catch(() => {}); }, data ? 4000 : 300);
+  }
+
   // ---------- Документы и согласия (152-ФЗ, ст. 18 «О рекламе») ----------
   // LEGAL_V — версия документов: при изменении текстов увеличить, и ученик подтвердит согласие заново
   const LEGAL_V = "1.0";
@@ -1658,7 +1740,7 @@
   // ---------- Соревнования: рейтинг недели, друзья, стаи ----------
   let LG = null, lgTab = "all";
   const lgName = () => L("Соревнования", "Competitions");
-  async function leagueScreen() {
+  async function leagueScreen() { markSeen("league");
     const tok = seqTok;
     const back = tg ? "" : `<button class="backlink" id="bk">${icon("back")}${L("Назад", "Back")}</button>`;
     if (!LG) $app.innerHTML = `${back}<div class="paper" style="margin-top:8vh"><div class="eyebrow">${L("Загружаю рейтинг…", "Loading the league…")}</div></div>`;
@@ -1735,6 +1817,9 @@
       ${body}${D.demo ? `<div class="foot">${L("Демо: открой приложение из бота", "Demo: open the app from the bot")}</div>` : ""}`;
     const bk = document.getElementById("bk"); if (bk) bk.onclick = goBack;
     document.querySelectorAll("[data-lt]").forEach(b => b.onclick = () => { haptic(); lgTab = b.dataset.lt; drawLeague(); });
+    const meCard = $app.querySelector(".lg-me");
+    if (meCard && me.pl) { meCard.insertAdjacentHTML("afterend", `<button class="secondary" id="lgShare" style="margin-top:10px">${L("Поделиться местом в рейтинге", "Share my place")}</button>`);
+      document.getElementById("lgShare").onclick = () => shareText(L(`Я на ${me.pl} месте в рейтинге недели по китайскому с Чиной — ${me.xp} очков! 🏆 Сможешь обогнать?`, `I'm #${me.pl} in this week's Chinese league with Chína: ${me.xp} points! 🏆 Can you beat me?`)); }
     const inv = document.getElementById("lgInv");
     if (inv) inv.onclick = () => shareText(L("Давай соревноваться в китайском! Кто наберёт больше очков за неделю с Чиной? 🏆 汪！", "Let's compete in Chinese! Who scores more points with Chína this week? 🏆 汪！"));
     const ci = document.getElementById("lgClanInv");
@@ -1753,7 +1838,7 @@
     if (hd) hd.onchange = () => post({ op: "hide", v: hd.checked ? 1 : 0 });
   }
 
-  async function scanScreen() {
+  async function scanScreen() { markSeen("scan");
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <div class="scan-head"><div class="scan-dog">${chinaSVG("think")}</div>
         <div class="grow"><div class="eyebrow">扫一扫 · сканер</div><div class="title-big" style="margin:2px 0 0">Сканер текста</div></div></div>
@@ -1887,7 +1972,7 @@
   const exVar = ex => (ex && ex.variant) || 1;
   const varTag = (lv, v) => variantsOf(lv).length > 1 || (v || 1) > 1 ? `Вариант ${v || 1} · ` : "";
   const secItems = s => s.parts.reduce((n, p) => n + p.items.length, 0);
-  async function hskHub() {
+  async function hskHub() { markSeen("exam");
     $app.innerHTML = `<div class="paper"><div class="eyebrow">Загружаю экзамены…</div></div>`;
     try { await loadExams(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить экзамены<p class="muted small">${esc(e.message)}</p></div>`; return; }
     if (!hubLevel) hubLevel = examLv(S.l);
@@ -2217,7 +2302,7 @@
     } catch (e) {}
     return sendP(payload);
   }
-  function askSheet(prefill = "") {
+  function askSheet(prefill = "") { markSeen("ask");
     const bg = document.createElement("div"); bg.className = "backdrop";
     bg.innerHTML = `<div class="sheet"><div class="grab"></div><div class="sheet-dog">${chinaSVG("think")}</div>
       <h2 style="font-size:22px">Спросить учителя</h2><p class="muted small" style="margin-top:4px">Любой вопрос о китайском: правило, слово, задание, иероглиф, подготовка к экзамену. Учитель ответит в чате по-русски, с примерами.</p>
@@ -2232,7 +2317,7 @@
   let kkLevel = 0;
   const KK_TYPE = { repeat: "Повтори услышанное", answer: "Ответь на услышанный вопрос", question: "Ответь на вопрос", picture: "Расскажи по картинке",
     retell: "Перескажи услышанное", read: "Прочитай вслух", situation: "Ситуация: ответь по заданию", opinion: "Выскажи мнение" };
-  async function hskkHub() {
+  async function hskkHub() { markSeen("oral");
     $app.innerHTML = `<div class="paper"><div class="eyebrow">Загружаю задания…</div></div>`;
     try { await loadExams(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить задания<p class="muted small">${esc(e.message)}</p></div>`; return; }
     const levels = EXAMS.hskk.levels; const L = levels[kkLevel] || levels[0];
@@ -2297,7 +2382,7 @@
     return LIFE;
   }
   const TRACK_LOOK = { life: ["t-sky", "trip"], work: ["t-cream", "work"], business: ["t-navy", "biz"], self: ["t-rose", "self"] };
-  async function lifeTab() {
+  async function lifeTab() { markSeen("life");
     $app.innerHTML = `<div class="paper"><div class="eyebrow">Загружаю…</div></div>`;
     try { await loadLife(); } catch (e) { $app.innerHTML = `<div class="paper">Не удалось загрузить раздел<p class="muted small">${esc(e.message)}</p></div>`; navBar("life"); return; }
     $app.innerHTML = `<div class="title-big" style="margin-top:4px">Китайский для жизни</div>
