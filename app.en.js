@@ -455,16 +455,57 @@
   if (tg) tg.BackButton.onClick(goBack);
 
   // ---------- данные ----------
+  // Программа разбита по уровням (prog/index.json + prog/1.json … 9.json, tools/split_program.py):
+  // при старте грузим только уровень ученика (≈50–300 КБ вместо 6 МБ), остальные — в фоне.
+  const PROG_DIR = "prog/en/";
+  let PIDX = null, allReady = false, allDone = null, allP = null;
+  const lvLoaded = {}, lvOk = {};
+  const curLv = () => Math.min(9, Math.max(1, +S.l || 1));
   async function load() {
-    const raw = await (await fetch("program.en.json", { cache: "no-cache" })).json();
-    const words = new Map(); byLevel = {};
-    raw.words.forEach(w => { const o = { h: w[0], p: w[1], m: w[2], lv: w[3], day: w[4], hint: w[5], ex: w[6], ext: w[7], seg: w[8] || "", exp: w[9] || "" }; o.exs = decodeExs(o, w[10]); words.set(o.h, o); (byLevel[o.lv] = byLevel[o.lv] || []).push(o); });
-    const lessons = {};
-    Object.entries(raw.lessons).forEach(([lv, rows]) => rows.forEach(r => { lessons[lv + ":" + r[0]] = { lv: +lv, day: r[0], week: r[1], kind: r[2], topic: r[3], sounds: r[4], grammar: r[5], gex: r[6] || [], gq: r[7] || [], gb: Array.isArray(r[8]) ? r[8] : [] }; }));
-    const listening = (raw.listening || []).map(x => ({ lv: x[0], part: x[1], lines: x[2], q: x[3], opts: x[4], py: x[5], ans: x[6], ru: x[7] }));
-    P = { words, lessons, sizes: raw.sizes, listening };
+    P = { words: new Map(), lessons: {}, sizes: {}, listening: [] }; byLevel = {};
+    allP = new Promise(res => { allDone = res; });
+    PIDX = await (await fetch(PROG_DIR + "index.json", { cache: "no-cache" })).json();
+    P.sizes = PIDX.sizes || {};
     // готовы ли mp3: проверяем один файл, не задерживая запуск
     fetch(`audio/${clipId("w:你好")}.mp3`, { method: "HEAD" }).then(r => { audioOk = r.ok; }).catch(() => {});
+  }
+  function mergeLevel(raw) {
+    raw.words.forEach(w => { const o = { h: w[0], p: w[1], m: w[2], lv: w[3], day: w[4], hint: w[5], ex: w[6], ext: w[7], seg: w[8] || "", exp: w[9] || "" };
+      o.exs = decodeExs(o, w[10]); if (EXS_RAW && EXS_RAW[o.h]) o.exs = decodeExs(o, EXS_RAW[o.h]); P.words.set(o.h, o); (byLevel[o.lv] = byLevel[o.lv] || []).push(o); });
+    (raw.lessons || []).forEach(r => { P.lessons[raw.lv + ":" + r[0]] = { lv: +raw.lv, day: r[0], week: r[1], kind: r[2], topic: r[3], sounds: r[4], grammar: r[5], gex: r[6] || [], gq: r[7] || [], gb: Array.isArray(r[8]) ? r[8] : [] }; });
+    (raw.listening || []).forEach(x => P.listening.push({ lv: x[0], part: x[1], lines: x[2], q: x[3], opts: x[4], py: x[5], ans: x[6], ru: x[7] }));
+  }
+  function loadLevel(lv) {
+    lv = Math.min(9, Math.max(1, +lv || 1));
+    if (!lvLoaded[lv]) lvLoaded[lv] = (async () => {
+      for (let i = 0; i < 3; i++) {
+        try { const r = await fetch(PROG_DIR + PIDX.files[lv]); if (r.ok) { mergeLevel(await r.json()); lvOk[lv] = true; return true; } } catch (e) {}
+        await new Promise(res => setTimeout(res, 800 * (i + 1)));
+      }
+      throw new Error("No connection. Check your internet and open the app again");
+    })();
+    return lvLoaded[lv];
+  }
+  // остальные уровни — по очереди в фоне: сначала пройденные (их слова в повторении), потом следующие
+  async function loadRest() {
+    const me = Math.min(9, Math.max(1, +S.l || 1)), order = [];
+    for (let l = me - 1; l >= 1; l--) order.push(l);
+    for (let l = me + 1; l <= 9; l++) order.push(l);
+    for (const l of order) { try { await loadLevel(l); } catch (e) {} }
+    allReady = true; allDone(true);
+  }
+  // уровень ученика сменился, а его файл ещё не пришёл — коротко ждём
+  function waitLevel(fn) {
+    const tok = seqTok;
+    $app.innerHTML = `<div class="paper" style="margin-top:8vh"><div class="eyebrow">Getting your tasks ready…</div></div>`;
+    loadLevel(curLv()).then(() => { if (tok === seqTok) fn(); }).catch(e => toast(e.message));
+  }
+  // экраны, которым нужна вся программа (повторение, словарь, сканер): ждём фоновую догрузку
+  function waitAll(fn) {
+    if (allReady) return fn();
+    const tok = seqTok;
+    $app.innerHTML = `<div class="paper" style="margin-top:8vh"><div class="eyebrow">Getting your tasks ready…</div></div>`;
+    allP.then(() => { if (tok === seqTok) fn(); });
   }
   // все примеры слова: [иероглифы, пиньинь, перевод, куски через пробел]; первый — из программы,
   // дальше дополнительные (11-й элемент строки слова, export_webapp.compact_examples)
@@ -482,17 +523,19 @@
   // дополнительные примеры к словам — отдельный файл examples.json (≈2 МБ): грузим в фоне после старта,
   // чтобы program.json оставался лёгким. Перед уроком/тестом/повторением ждём его не дольше 2 с,
   // иначе задания строятся по примеру из программы (как раньше).
-  let exsReady = false, exsP = null;
+  let exsReady = false, exsP = null, EXS_RAW = null;
   function loadExamples() {
     if (exsReady) return Promise.resolve(true);
     if (!exsP) exsP = fetch("examples.en.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(d => {
       if (!d || !d.x) { exsP = null; return false; }
+      EXS_RAW = d.x;
       Object.entries(d.x).forEach(([h, rows]) => { const o = P.words.get(h); if (o) o.exs = decodeExs(o, rows); });
       exsReady = true; return true;
     }).catch(() => { exsP = null; return false; });
     return exsP;
   }
   function withExamples(fn) {
+    if (!allReady) return waitAll(() => withExamples(fn));
     if (exsReady) return fn();
     const tok = seqTok; let done = false;
     $app.innerHTML = `<div class="paper" style="margin-top:8vh"><div class="eyebrow">Getting your tasks ready…</div></div>`;
@@ -793,9 +836,10 @@
   const lessonLock = l => !l ? "" : (S.done && l.kind !== "выходной" && !can("ahead")) || (l.lv >= 7 && !can("hsk79"))
     || (l.kind === "тест" && l.topic.startsWith("Пробный экзамен") && !can("final")) ? " " + LOCK : "";
   function home() {
+    if (!lvOk[curLv()]) return waitLevel(home);
     const l = lesson(S.l, S.d);
     const ws = l ? lessonWords(S.l, S.d) : [];
-    const due = (S.due || []).filter(h => word(h)).length;
+    const due = allReady ? (S.due || []).filter(h => word(h)).length : (S.due || []).length;
     const line = chinaLine(due);
     const glyph = l && l.kind === "урок" && ws[0] ? ws[0].h[0] : l && l.kind === "тест" ? "考" : "学";
     let title = "", meta = "", cta = "";
@@ -925,7 +969,7 @@
     return `<div class="feed"><span class="chip-f ${fed ? "on" : ""}">${fed ? "Chína is full" : "The bowl is waiting for a lesson"}</span>${S.bn
       ? `<span class="chip-f on">Chína got her bone</span>` : fed ? `<button class="chip-f" id="bone">5 more minutes — a bone</button>` : ""}${S.fz ? `<span class="chip-f" title="Streak freezes">${i3("ice", "i3x")}${S.fz}</span>` : ""}</div>`;
   }
-  function startBone() { if (!exsReady) return withExamples(startBone2); return startBone2(); }
+  function startBone() { if (!exsReady || !allReady) return withExamples(startBone2); return startBone2(); }
   function startBone2() {
     const seen = new Set(); let ws = (S.due || []).map(word).filter(Boolean);
     for (let d = S.d - 1; ws.length < 12 && d >= 1 && d > S.d - 8; d--) if (lesson(S.l, d)) ws = ws.concat(lessonWords(S.l, d));
@@ -1122,7 +1166,7 @@
 
   // ---------- урок и повторение ----------
   function startLesson(lv, d) {
-    if (!exsReady) return withExamples(() => startLesson2(lv, d));
+    if (!exsReady || !allReady) return withExamples(() => startLesson2(lv, d));
     return startLesson2(lv, d);
   }
   function startLesson2(lv, d) {
@@ -1167,7 +1211,7 @@
     document.getElementById("ok").onclick = () => send({ t: "lesson", l: l.lv, d: l.day, sc: 0, tot: 0, m: [] });
   }
   function startReview() {
-    if (!exsReady) return withExamples(startReview2);
+    if (!exsReady || !allReady) return withExamples(startReview2);
     return startReview2();
   }
   function startReview2() {
@@ -1376,7 +1420,7 @@
   }
 
   // ---------- словарь ----------
-  function dictionary() { markSeen("dict");
+  function dictionary() { if (!allReady) return waitAll(dictionary); markSeen("dict");
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Back</button>`}
       <h2 style="font-size:24px;margin-bottom:12px">Dictionary</h2>
       <button class="wide w-scan" id="scanD" style="margin:0 0 12px"><span class="round r3d">${i3("scan", "i3r")}</span><span class="grow"><span class="t">Text scanner${lockMark("scan")}</span><br><span class="s">Snap a text — I'll translate and break it down</span></span>${icon("chev", "i chev")}</button>
@@ -1392,7 +1436,7 @@
     const plain = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s/g, "");
     const render = () => {
       const raw = dictQuery.trim(), q = plain(raw);
-      let arr = dictLevel ? (byLevel[dictLevel] || []) : Array.from(P.words.values());
+      let arr = dictLevel ? (byLevel[dictLevel] || []) : [1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap(l => byLevel[l] || []);
       if (raw) {
         // точные совпадения выше: иероглиф → пиньинь (с тонами, если их ввели) → перевод
         const low = raw.toLowerCase(), toned = /[\u0300-\u036f]/.test(raw.normalize("NFD"));
@@ -1838,7 +1882,7 @@
     if (hd) hd.onchange = () => post({ op: "hide", v: hd.checked ? 1 : 0 });
   }
 
-  async function scanScreen() { markSeen("scan");
+  async function scanScreen() { if (!allReady) return waitAll(scanScreen); markSeen("scan");
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Back</button>`}
       <div class="scan-head"><div class="scan-dog">${chinaSVG("think")}</div>
         <div class="grow"><div class="eyebrow">扫一扫 · scanner</div><div class="title-big" style="margin:2px 0 0">Text scanner</div></div></div>
@@ -2487,5 +2531,5 @@
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
   }
   const VIEW = new URLSearchParams(location.search).get("v");
-  Promise.all([load(), fetchState()]).then(() => { setTimeout(loadExamples, 300); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Couldn't load the course<p class="muted small">${esc(e.message)}</p></div>`; });
+  Promise.all([load(), fetchState()]).then(() => loadLevel(S.l)).then(() => { setTimeout(loadRest, 30); setTimeout(loadExamples, 1500); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Couldn't load the course<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
