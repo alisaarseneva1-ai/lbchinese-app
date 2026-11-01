@@ -2142,7 +2142,8 @@
       const head = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round(pos / total * 100)}%"></i></div>
         <span class="clock" id="clock"></span>${s.id === "reading" ? `<button class="dict-t ${dictOn ? "on" : ""}" id="dt">Словарь</button>` : ""}</div>`;
       const txt = t => s.id === "reading" && dictOn ? tapHtml(t) : esc(t).replace(/\n/g, "<br>");
-      const bank = u.match ? `<div class="bank">${p.bank.map((b, k) => `<div class="bank-row"><span class="k">${"ABCDEFGH"[k]}</span><span class="${HAN.test(b) ? "zh" : ""}">${txt(b)}${p.bank_py && p.bank_py[k] ? pyH(p.bank_py[k]) : ""}</span></div>`).join("")}</div>` : "";
+      const bank = u.match && p.bank_img ? `<div class="photos">${p.bank.map((b, k) => photoH(p.bank_img[k], b, "ABCDEFGH"[k])).join("")}</div>`
+        : u.match ? `<div class="bank">${p.bank.map((b, k) => `<div class="bank-row"><span class="k">${"ABCDEFGH"[k]}</span><span class="${HAN.test(b) ? "zh" : ""}">${txt(b)}${p.bank_py && p.bank_py[k] ? pyH(p.bank_py[k]) : ""}</span></div>`).join("")}</div>` : "";
       const first = u.items[0];
       const passage = first.passage ? `<div class="passage zh">${txt(first.passage)}</div>` : "";
       const groupAudio = !u.match && u.items.length > 1 && first.audio ? audioBtn("a" + first.n, first.aid, first.audio, "Прослушать запись") : "";
@@ -2154,7 +2155,8 @@
         h += picH(it);
         if (it.text) h += `<div class="ex-text ${HAN.test(it.text) ? "zh" : ""}">${txt(it.text)}${it.text_py ? pyH(it.text_py) : ""}</div>`;
         if (it.q) h += `<div class="ex-q zh">${txt(it.q)}${it.q_py ? pyH(it.q_py) : ""}</div>`;
-        if (p.type === "choice") h += `<div class="opts">${it.options.map((o, k) => `<button class="opt ${HAN.test(o) ? "zh" : ""} ${a === k ? "sel" : ""}" data-n="${it.n}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><span>${esc(o)}${it.options_py && it.options_py[k] ? pyH(it.options_py[k]) : ""}</span></button>`).join("")}</div>`;
+        if (p.type === "choice" && it.options_img) h += `<div class="photo-opts">${it.options.map((o, k) => `<button class="opt ph ${a === k ? "sel" : ""}" data-n="${it.n}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><img src="img/hsk/${esc(it.options_img[k])}.jpg" alt="${picAlt(o)}" loading="lazy" decoding="async"></button>`).join("")}</div>`;
+        else if (p.type === "choice") h += `<div class="opts">${it.options.map((o, k) => `<button class="opt ${HAN.test(o) ? "zh" : ""} ${a === k ? "sel" : ""}" data-n="${it.n}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><span>${esc(o)}${it.options_py && it.options_py[k] ? pyH(it.options_py[k]) : ""}</span></button>`).join("")}</div>`;
         else if (p.type === "match") h += `<div class="letters">${p.bank.map((_, k) => `<button class="letter ${a === k ? "sel" : ""}" data-n="${it.n}" data-k="${k}">${"ABCDEFGH"[k]}</button>`).join("")}</div>`;
         else {
           if (it.word) h += `<div class="small muted">Используй слово: <b class="zh">${esc(it.word)}</b></div>`;
