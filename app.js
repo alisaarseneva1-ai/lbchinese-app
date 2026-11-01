@@ -1088,7 +1088,7 @@
       <div class="prem-list">${PREM_LIST.map(([e_, t, s_]) => `<div class="prem-row"><span class="pe">${i3(e_, "i3r")}</span><div class="grow"><b>${t}</b><small>${s_}</small></div><span class="pk">${icon("check")}</span></div>`).join("")}</div>
       ${CL().length ? `<div class="pcard prem-code"><b>Разговорный клуб −${CL()[0].dc || 50}%</b><p class="small muted" style="margin:4px 0 0">С Премиумом запись на клуб с носителями — со скидкой. Премиум окупается уже на первом клубе.</p></div>` : ""}
       <div class="pcard prem-code"><b>Есть код доступа?</b><p class="small muted" style="margin:4px 0 0">Напиши боту <b>/code КОД</b> — Премиум включится сразу.</p></div>
-      <p class="foot">Оплата — картой через Tribute или Telegram Stars. Условия: /terms · вопросы: /paysupport</p>`;
+      <p class="foot">Оплата — картой через Tribute или Telegram Stars. Условия: /terms · вопросы: /paysupport<br>© 2026 LinguaBridge · Арсеньева А. П. Копирование материалов без разрешения запрещено.</p>`;
     const bk = document.getElementById("bk"); if (bk) bk.onclick = goBack;
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", fn); };
     on("buyY", () => buyStars("y")); on("buyM", () => buyStars("m"));
