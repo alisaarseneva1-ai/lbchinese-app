@@ -290,6 +290,13 @@
     levels: "Уроки HSK 2–6", ahead: "Уроки вперёд", mistakes: "Работа над ошибками", scan: "Сканер текста: фото → перевод и грамматика" };
   const isPrem = () => !PR || !!PR.p;
   const can = f => isPrem() || ((PR && PR.ff) || []).includes(f);
+  // фото к заданиям экзамена (img/hsk/pNN.jpg рядом с приложением); без фото — старое текстовое описание
+  const picAlt = p => esc(((/\((.*)\)\s*$/.exec(p || "") || [])[1]) || "");
+  const photoH = (id, p, n) => `<figure class="photo">${n ? `<b>${n}</b>` : ""}<img src="img/hsk/${esc(id)}.jpg" alt="${picAlt(p)}" loading="lazy" decoding="async"></figure>`;
+  const picH = it => it.imgs && it.imgs.length ? `<div class="photos">${it.imgs.map((id, i) => photoH(id, (it.pics || [])[i], i + 1)).join("")}</div>`
+    : it.img ? photoH(it.img, it.pic)
+    : it.pic ? `<div class="pic">${esc(it.pic)}</div>`
+    : it.pics ? `<div class="pics">${it.pics.map(x => `<div class="pic">${esc(x)}</div>`).join("")}</div>` : "";
   const lvPaid = lv => PR && PR.on && lv > (PR.fl || 9) && lv < 7;   // уроки HSK 2–6 — в Премиуме (fl — последний бесплатный уровень)
   const lockMark = f => can(f) ? "" : " " + LOCK;
   const needP = (f, fn) => () => can(f) ? fn() : go(() => premiumScreen(f));
@@ -2144,8 +2151,7 @@
         let h = `<div class="ex-item"><div class="ex-n">${it.n}</div><div class="grow">`;
         if (it.audio && (u.match || u.items.length === 1)) h += audioBtn("a" + it.n, it.aid, it.audio, "Прослушать");
         if (it.q_audio && !it.audio && u.items.length > 1) h += audioBtn("q" + it.n, it.qid, [["", it.q_audio]], "Вопрос");
-        if (it.pic) h += `<div class="pic">${esc(it.pic)}</div>`;
-        if (it.pics) h += `<div class="pics">${it.pics.map(x => `<div class="pic">${esc(x)}</div>`).join("")}</div>`;
+        h += picH(it);
         if (it.text) h += `<div class="ex-text ${HAN.test(it.text) ? "zh" : ""}">${txt(it.text)}${it.text_py ? pyH(it.text_py) : ""}</div>`;
         if (it.q) h += `<div class="ex-q zh">${txt(it.q)}${it.q_py ? pyH(it.q_py) : ""}</div>`;
         if (p.type === "choice") h += `<div class="opts">${it.options.map((o, k) => `<button class="opt ${HAN.test(o) ? "zh" : ""} ${a === k ? "sel" : ""}" data-n="${it.n}" data-k="${k}"><span class="k">${"ABCD"[k]}</span><span>${esc(o)}${it.options_py && it.options_py[k] ? pyH(it.options_py[k]) : ""}</span></button>`).join("")}</div>`;
@@ -2316,7 +2322,7 @@
     const key = exVar(ex) > 1 ? `draft_${ex.level}_v${exVar(ex)}_${it.n}` : `draft_${ex.level}_${it.n}`;
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${examName(ex.level)} · ${it.mode === "essay" ? "сочинение" : it.mode === "translate" ? "перевод" : "предложение"}</div>
-      ${it.pic ? `<div class="pic">${esc(it.pic)}</div>` : ""}${it.pics ? `<div class="pics">${it.pics.map(x => `<div class="pic">${esc(x)}</div>`).join("")}</div>` : ""}
+      ${picH(it)}
       <div class="ex-text ${HAN.test(it.text || "") ? "zh" : ""}">${HAN.test(it.text || "") ? tapHtml(it.text) : esc(it.text)}</div>
       ${it.word ? `<div class="small muted">Используй слово: <b class="zh">${esc(it.word)}</b></div>` : ""}
       <textarea class="wr zh" id="ta" rows="${it.mode === "sentence" ? 4 : 12}" placeholder="Пиши иероглифами">${esc(store.get(key, ""))}</textarea>
@@ -2391,7 +2397,7 @@
     $app.innerHTML = `<div class="bar"><button class="x" id="x">${icon("close")}</button><div class="line"><i style="width:${Math.round(k / p.items.length * 100)}%"></i></div><span class="step-count">${k + 1}/${p.items.length}</span></div>
       <div class="paper ex-paper" style="text-align:left"><div class="eyebrow">${esc(L.name)} · ${esc(p.title)}</div><div class="small muted" style="margin:4px 0 12px">${esc(p.ru || KK_TYPE[p.type] || "")}</div>
       ${it.audio ? `<button class="sound" id="pl">${icon("sound")}Прослушать задание</button>` : ""}
-      ${it.pic ? `<div class="pic big-pic">${esc(it.pic)}</div>` : ""}
+      ${it.img ? picH(it) : it.pic ? `<div class="pic big-pic">${esc(it.pic)}</div>` : ""}
       ${showText ? `<div class="ex-text zh">${tapHtml(it.text)}</div>${it.py ? pyH(it.py) : ""}` : ""}
       <div class="kk-times">${p.prep_seconds ? `<span>Подготовка: ${p.prep_seconds >= 60 ? Math.round(p.prep_seconds / 60) + " мин" : p.prep_seconds + " с"}</span>` : ""}<span>Ответ: ${(it.answer_seconds || p.answer_seconds || 0) >= 60 ? Math.round((it.answer_seconds || p.answer_seconds) / 60 * 10) / 10 + " мин" : (it.answer_seconds || p.answer_seconds || 10) + " с"}</span></div>
       ${p.prep_seconds ? `<button class="secondary" id="prep" style="margin-top:10px">Таймер подготовки</button>` : ""}
