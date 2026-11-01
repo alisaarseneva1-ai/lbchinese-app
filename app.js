@@ -287,9 +287,10 @@
     chat: "Разговор с Чиной без лимита", voice: "Голосовые с разбором тонов", ask: "Учитель без лимита",
     essay: "Проверка сочинений без лимита", exam: "Пробные экзамены HSK 3.0", hskk: "Устный экзамен HSK 口语 и HSKK",
     role: "Ролевые игры «Для жизни»", final: "Итоговый тест уровня", hsk79: "Уровни HSK 7–9",
-    ahead: "Уроки вперёд", mistakes: "Работа над ошибками", scan: "Сканер текста: фото → перевод и грамматика" };
+    levels: "Уроки HSK 2–6", ahead: "Уроки вперёд", mistakes: "Работа над ошибками", scan: "Сканер текста: фото → перевод и грамматика" };
   const isPrem = () => !PR || !!PR.p;
   const can = f => isPrem() || ((PR && PR.ff) || []).includes(f);
+  const lvPaid = lv => PR && PR.on && lv > (PR.fl || 9) && lv < 7;   // уроки HSK 2–6 — в Премиуме (fl — последний бесплатный уровень)
   const lockMark = f => can(f) ? "" : " " + LOCK;
   const needP = (f, fn) => () => can(f) ? fn() : go(() => premiumScreen(f));
 
@@ -833,7 +834,7 @@
     return `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="${track}" stroke-width="6"/><circle cx="32" cy="32" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.min(1, pct))}"/></svg>`; };
 
   // ---------- главная ----------
-  const lessonLock = l => !l ? "" : (S.done && l.kind !== "выходной" && !can("ahead")) || (l.lv >= 7 && !can("hsk79"))
+  const lessonLock = l => !l ? "" : (S.done && l.kind !== "выходной" && !can("ahead")) || (l.lv >= 7 && !can("hsk79")) || (lvPaid(l.lv) && !can("levels"))
     || (l.kind === "тест" && l.topic.startsWith("Пробный экзамен") && !can("final")) ? " " + LOCK : "";
   function home() {
     if (!lvOk[curLv()]) return waitLevel(home);
@@ -896,7 +897,7 @@
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
     const need = fn => () => S.ok ? fn() : toast("Нужна подписка");
     const lessonGate = () => !l ? null : (S.done && l.kind !== "выходной" && !can("ahead")) ? "ahead"
-      : (l.lv >= 7 && !can("hsk79")) ? "hsk79" : (l.kind === "тест" && l.topic.startsWith("Пробный экзамен") && !can("final")) ? "final" : null;
+      : (l.lv >= 7 && !can("hsk79")) ? "hsk79" : (lvPaid(l.lv) && !can("levels")) ? "levels" : (l.kind === "тест" && l.topic.startsWith("Пробный экзамен") && !can("final")) ? "final" : null;
     const startOrLock = () => { const f = lessonGate(); f ? go(() => premiumScreen(f)) : go(() => startLesson(S.l, S.d)); };
     on("start", need(startOrLock));
     on("saveS", need(startOrLock));
@@ -1135,7 +1136,7 @@
       9: `${size(9)} слов: чэнъюи, поговорки, стилистика · учебный этап` };
     bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:22px">Выбрать уровень</h2>
       <p class="muted small" style="margin-top:4px">Урок начнётся с первой недели уровня. Выученные слова и повторения сохранятся.</p>
-      <div class="list" style="margin-top:14px">${LEVELS.map(lv => `<button class="item" data-lv="${lv}"><b style="width:78px;white-space:nowrap">${hsk(lv)}${lv >= 7 ? lockMark("hsk79") : ""}</b><div class="grow s">${INFO[lv]}</div>${lv === S.l ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div>
+      <div class="list" style="margin-top:14px">${LEVELS.map(lv => `<button class="item" data-lv="${lv}"><b style="width:78px;white-space:nowrap">${hsk(lv)}${lv >= 7 ? lockMark("hsk79") : lvPaid(lv) ? lockMark("levels") : ""}</b><div class="grow s">${INFO[lv]}</div>${lv === S.l ? icon("check") : icon("chev", "i chev")}</button>`).join("")}</div>
       <p class="muted small" style="margin-top:10px">До HSK 9 всего 11 000 слов; официальный блок 7–9 — 5 600 слов.</p>${note79()}</div>`;
     bindLinks(bg);
     bg.querySelectorAll("[data-lv]").forEach(b => b.onclick = e => { e.stopPropagation(); const lv = +b.dataset.lv; haptic();
