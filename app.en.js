@@ -249,7 +249,7 @@
   }
   // Сервер бота: состояние и приём результатов, когда приложение открыто не кнопкой внизу чата
   // (кнопка «Открыть» в списке чатов, меню бота, ссылка t.me/<бот>/app) — там sendData не работает.
-  const API = "https://129-101-125-133.sslip.io/app/";
+  const API = "https://lbchinese.ru/app/";
   const DEMO = { n: "friend", l: 1, d: 1, s: 0, done: 0, k: {}, due: [], a: "", ok: 1, tl: 0, p: "china", demo: 1 };
   let S = readState() || DEMO;
   const viaApi = () => !!(tg && tg.initData && (S.srv || (tg.initDataUnsafe && tg.initDataUnsafe.query_id)));
