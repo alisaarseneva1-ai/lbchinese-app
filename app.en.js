@@ -1,4 +1,4 @@
-/* LinguaBridge — мини-приложение Telegram.
+/* lbchinese — мини-приложение Telegram.
    Состояние ученика приходит от бота в ссылке (?s=...), результаты уходят боту через sendData. */
 (function () {
   "use strict";
@@ -29,7 +29,7 @@
   const note79 = (short) => `<div class="facts" id="note79"><b>Good to know</b>
     <p>Officially, levels 7, 8 and 9 form one shared band, “七—九级”: the vocabulary (5,600 words), characters, grammar, topics and tasks are common to all three — there are no separate lists for HSK 7, 8 and 9 (新版HSK考试大纲, 2025).${short ? "" : ` There's also just one exam: HSK 7–9, 98 tasks, about 210 minutes, computer-only. Based on the score, you're awarded “below 7”, level 7, 8 or 9; the cut-off scores haven't been officially published (chinesetest.cn).`}</p>
     ${short ? "" : `<p>Each level only gets a short skills description: 7 — communicate correctly and fluently at work and in study; 8 — appropriately and in depth; 9 — precisely and in depth in any professional or academic setting.</p>`}
-    <p>Our split into HSK 7, 8 and 9 is a teaching one (LinguaBridge): we spread the official 7–9 words and grammar across three stages — from more frequent words and literary grammar (7), through rhetoric and formal style (8), to chengyu, sayings and stylistics (9).</p>
+    <p>Our split into HSK 7, 8 and 9 is a teaching one (lbchinese): we spread the official 7–9 words and grammar across three stages — from more frequent words and literary grammar (7), through rhetoric and formal style (8), to chengyu, sayings and stylistics (9).</p>
     <p class="src">Sources: ${SRC79.map(([t, u]) => `<a href="${u}" data-ext="${u}">${t}</a>`).join(" · ")}</p></div>`;
   // ссылки в Telegram открываем через openLink, иначе мини-приложение закроется
   const bindLinks = root => (root || document).querySelectorAll("a[data-ext]").forEach(a => a.onclick = e => {
@@ -197,7 +197,7 @@
 
   // ---------- мотивация: значки, приглашения, «Поделиться», сторис ----------
   const BADGES = [["streak3", "flame", "3 days"], ["streak7", "flame", "7 days"], ["streak14", "flame", "14 days"], ["streak30", "flame", "30 days"],
-    ["streak50", "flame", "50 days"], ["streak100", "flame", "100 days"], ["friend3", "gift", "Chína's Friend"], ["friend10", "club", "LinguaBridge Ambassador"]];
+    ["streak50", "flame", "50 days"], ["streak100", "flame", "100 days"], ["friend3", "gift", "Chína's Friend"], ["friend10", "club", "lbchinese Ambassador"]];
   // тексты «Поделиться» — от лица Чины, чтобы хотелось переслать
   const SHARE = {
     invite: "Hi! I'm Chína — a puppy who teaches Chinese in 20 minutes a day: HSK lessons, words, voice chats. Free! Want to learn together? 汪！",
@@ -1065,7 +1065,7 @@
         <button class="item" id="lvset">${icon("book")}<div class="grow"><div class="t">Choose your level</div><div class="s">Now ${hsk(S.l)}</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="pyset"><span class="i py-ic">拼</span><div class="grow"><div class="t">Pinyin</div><div class="s" id="pyv">${PY_MODES[pyMode()]}</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="myd">${icon("search")}<div class="grow"><div class="t">My dictionary</div><div class="s">${myWords().length} ${plural(myWords().length, "word", "words", "words")} from texts and phrases</div></div>${icon("chev", "i chev")}</button>
-        <button class="item" id="fbk">${icon("ask")}<div class="grow"><div class="t">Leave a review</div><div class="s">For the LinguaBridge team — and other learners, if you allow it</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="fbk">${icon("ask")}<div class="grow"><div class="t">Leave a review</div><div class="s">For the lbchinese team — and other learners, if you allow it</div></div>${icon("chev", "i chev")}</button>
         ${PR ? `<button class="item" id="premI"><span class="i">${i3("crown", "i3x")}</span><div class="grow"><div class="t">Chína Premium</div><div class="s">${PR.p ? "until " + fmtDate(PR.u) + (PR.sub ? " · auto-renews" : "") : "free plan · from " + PR.m + " ⭐ a month"}</div></div>${icon("chev", "i chev")}</button>`
           : `<div class="item">${icon("card")}<div class="grow"><div class="t">Access</div><div class="s">free, no limits</div></div></div>`}
       </div>`;
@@ -1138,7 +1138,7 @@
       <div class="prem-list">${PREM_LIST.map(([e_, t, s_]) => `<div class="prem-row"><span class="pe">${i3(e_, "i3r")}</span><div class="grow"><b>${t}</b><small>${s_}</small></div><span class="pk">${icon("check")}</span></div>`).join("")}</div>
       ${CL().length ? `<div class="pcard prem-code"><b>Speaking club −${CL()[0].dc || 50}%</b><p class="small muted" style="margin:4px 0 0">With Premium, you get a discount on speaking clubs with native speakers. Premium pays for itself at your very first club.</p></div>` : ""}
       <div class="pcard prem-code"><b>Have an access code?</b><p class="small muted" style="margin:4px 0 0">Send the bot <b>/code CODE</b> — Premium turns on right away.</p></div>
-      <p class="foot">Pay by card via Tribute or with Telegram Stars. Terms: /terms · questions: /paysupport<br>© 2026 LinguaBridge · A. P. Arseneva. Copying materials without permission is prohibited.</p>`;
+      <p class="foot">Pay by card via Tribute or with Telegram Stars. Terms: /terms · questions: /paysupport<br>© 2026 lbchinese · A. P. Arseneva. Copying materials without permission is prohibited.</p>`;
     const bk = document.getElementById("bk"); if (bk) bk.onclick = goBack;
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", fn); };
     on("buyY", () => buyStars("y")); on("buyM", () => buyStars("m"));
@@ -2646,7 +2646,7 @@
     const bg = document.createElement("div"); bg.className = "backdrop";
     const draw = () => {
       bg.innerHTML = `<div class="sheet"><div class="grab"></div><div class="sheet-dog">${chinaSVG("love")}</div>
-        <h2 style="font-size:22px">Your review</h2><p class="muted small" style="margin-top:4px">The LinguaBridge team will see it. We'll show it to other learners only if you allow it — the bot will ask.</p>
+        <h2 style="font-size:22px">Your review</h2><p class="muted small" style="margin-top:4px">The lbchinese team will see it. We'll show it to other learners only if you allow it — the bot will ask.</p>
         <div class="stars">${[1, 2, 3, 4, 5].map(i => `<button data-s="${i}" class="${i <= r ? "on" : ""}">★</button>`).join("")}</div>
         <textarea class="wr" id="fq" rows="4" placeholder="What do you like, what could be better, what's missing?"></textarea>
         <button class="primary" id="go" style="margin-top:12px">Send review</button></div>`;
@@ -2788,7 +2788,7 @@
       if (pv && pv.classList.contains("label")) pv.remove(); if (nx && nx.tagName === "P" && nx.classList.contains("center")) nx.remove(); el.remove(); });
     $app.querySelectorAll(".prem-founder, .prem-code").forEach(el => el.remove());
     $app.querySelectorAll("p.small.muted.center").forEach(el => { if (el.querySelector("[data-doc]")) el.remove(); });
-    const ft = $app.querySelector(".foot"); if (ft) ft.innerHTML = "Card or SBP payments via YooKassa. Payment questions — write in the chat with Chína: /paysupport<br>© 2026 LinguaBridge · Arseneva A. P. Copying materials without permission is prohibited.";
+    const ft = $app.querySelector(".foot"); if (ft) ft.innerHTML = "Card or SBP payments via YooKassa. Payment questions — write in the chat with Chína: /paysupport<br>© 2026 lbchinese · Arseneva A. P. Copying materials without permission is prohibited.";
     const y = (PR.yk || [])[2], q = (PR.yk || [])[1], m = (PR.yk || [])[0];
     const box = !(PR.yk && PR.yk.length) ? `<div class="pcard prem-code"><b>Card payments coming soon</b><p class="small muted" style="margin:4px 0 0">For now, Premium can be purchased in the Telegram bot @${BOT_USER}.</p></div>`
       : `<div class="label" style="margin-top:18px">By card or SBP</div><div class="plans">
