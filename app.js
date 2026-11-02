@@ -13,7 +13,7 @@
   const L = (ru, en) => LANG === "en" ? en : ru;
   const setLang = l => {
     try { localStorage.setItem("lb_lang", l); } catch (e) {}
-    try { if (tg && (tg.initData || S.tk)) apiPost("lang", Object.assign(apiAuth(), { l }), 4000).catch(() => {}); } catch (e) {}
+    try { if ((tg && tg.initData) || S.tk) apiPost("lang", Object.assign(apiAuth(), { l }), 4000).catch(() => {}); } catch (e) {}
     setTimeout(() => location.reload(), 250);
   };
   const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -249,9 +249,12 @@
   }
   // Сервер бота: состояние и приём результатов, когда приложение открыто не кнопкой внизу чата
   // (кнопка «Открыть» в списке чатов, меню бота, ссылка t.me/<бот>/app) — там sendData не работает.
-  const API = "https://lbchinese.ru/app/";
+  const API = window.LB_PWA && !(window.Telegram && window.Telegram.WebApp) ? "/app/" : "https://lbchinese.ru/app/";   // с сайта (lbchinese.ru/go) — тот же адрес
   const DEMO = { n: "друг", l: 1, d: 1, s: 0, done: 0, k: {}, due: [], a: "", ok: 1, tl: 0, p: "china", demo: 1 };
   let S = readState() || DEMO;
+  // приложение, открытое с сайта (lbchinese.ru/go) без Telegram: ключ ученика хранится на телефоне
+  const PWA = !tg && !!window.LB_PWA;
+  let PWK = ""; try { PWK = PWA ? localStorage.getItem("lb_k") || "" : ""; } catch (e) {}
   const viaApi = () => !!(tg && tg.initData && (S.srv || (tg.initDataUnsafe && tg.initDataUnsafe.query_id)));
   async function apiPost(path, body, ms) {
     const c = window.AbortController ? new AbortController() : null;
@@ -315,6 +318,15 @@
     if (er.length && !payload.er) payload = Object.assign({}, payload, { er: er.slice(0, 3) });
     let data = JSON.stringify(payload);
     if (bytes(data) > 4090 && payload.er) { payload = Object.assign({}, payload); delete payload.er; data = JSON.stringify(payload); }
+    if (PWA) {      // без Telegram: отдаём боту, ответ появится в чате приложения
+      if (!S.tk || S.off) { toast("Нет связи с Чиной — проверь интернет"); return false; }
+      if (bytes(data) > 4090) { toast("Слишком много данных за раз — сохрани результат ещё раз"); return false; }
+      apiPost("send", { k: S.tk, d: data, pw: 1 }).then(r => {
+        if (r.status === 200) { store.set("errs", []); CHAT.fast = Date.now() + 40000; go(chatScreen); setTimeout(chatFetch, 700); }
+        else toast(r.status === 401 ? "Войди заново: Профиль → Выйти" : "Не удалось сохранить — попробуй ещё раз");
+      }).catch(() => toast("Нет связи — проверь интернет и попробуй ещё раз"));
+      return true;
+    }
     if (S.neu && tg) { toast("Сначала нажми «Старт» в чате с ботом — потом прогресс будет сохраняться"); return false; }
     if (!tg || (S.demo && !viaApi())) { toast("Демо: открой приложение из бота, чтобы сохранять прогресс"); return false; }
     if (bytes(data) > 4090) { toast("Слишком много данных за раз — сохрани результат ещё раз"); return false; }
@@ -448,8 +460,10 @@
     depth = sub ? 1 : 0; window.scrollTo(0, 0);
     document.querySelectorAll("nav.nav").forEach(n => n.remove());
     if (tg) depth ? tg.BackButton.show() : tg.BackButton.hide();
+    pwaBack(depth && !_back);
     screen();
     askFab();
+    if (PWA && screen === home) installCard();
   }
   // кнопка «Спросить учителя» внизу каждого экрана (кроме экзамена на время)
   function screenCtx() {
@@ -463,13 +477,14 @@
     let b = document.getElementById("askFab");
     if (!b) {
       b = document.createElement("button"); b.id = "askFab"; b.className = "ask-fab"; b.type = "button";
-      b.innerHTML = icon("ask") + "<span>Спросить учителя</span>";
-      b.onclick = () => { haptic();
+      b.innerHTML = icon("ask") + `<span>${PWA ? "Чат с Чиной" : "Спросить учителя"}</span>`;
+      b.onclick = () => { haptic(); if (PWA) return go(chatScreen);
         let sel = ""; try { sel = String(window.getSelection() || "").trim(); } catch (e) {}
         askSheet(/[\u3400-\u9fff]/.test(sel) && sel.length < 40 ? `Что значит «${sel}»?` : "", screenCtx()); };
       document.body.appendChild(b);
     }
-    b.hidden = ASKOFF || S.demo;
+    b.hidden = ASKOFF || (S.demo && !PWA) || (PWA && !S.tk);
+    if (PWA) chatBadge();
   }
   const toHome = () => go(home, false);
   function goBack() {
@@ -1052,6 +1067,11 @@
           : `<div class="item">${icon("card")}<div class="grow"><div class="t">Доступ</div><div class="s">бесплатно, без ограничений</div></div></div>`}
       </div>`;
     navBar("prof");
+    if (PWA) { const ls = $app.querySelector(".list");
+      if (ls) ls.insertAdjacentHTML("beforeend", `<button class="item" id="pwChat">${icon("ask")}<div class="grow"><div class="t">Чат с Чиной</div><div class="s">Уроки, учитель и разговор — как в боте</div></div>${icon("chev", "i chev")}</button>
+        <button class="item" id="pwOut">${icon("user")}<div class="grow"><div class="t">Выйти</div><div class="s">Прогресс сохранится — войдёшь снова по почте или через Telegram</div></div>${icon("chev", "i chev")}</button>`);
+      const c = document.getElementById("pwChat"); if (c) c.onclick = () => go(chatScreen);
+      const o = document.getElementById("pwOut"); if (o) o.onclick = () => ask("Выйти из аккаунта на этом телефоне?", pwaLogout); }
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
     on("lvl", () => ask("Пройти тест на уровень в чате с ботом?", () => send({ t: "level" })));
     on("inv", () => shareText(SHARE.invite));
@@ -1664,7 +1684,7 @@
     });
   }
   const apiAuth = () => tg && tg.initData ? { i: tg.initData } : { k: S.tk || "" };
-  const scanReady = () => !!(tg && (tg.initData || S.tk)) && !S.demo;
+  const scanReady = () => !!((tg && tg.initData) || S.tk) && !S.demo;
   // ---------- рост: цель уровня, срочность, «Попробуй сегодня», поделиться ----------
   const markSeen = k => { try { const s_ = store.get("seen_f", {}); if (!s_[k]) { s_[k] = Date.now(); store.set("seen_f", s_); } } catch (e) {} };
   const LEVEL_WEEKS = lv => { let w = 0; Object.values(P.lessons).forEach(l => { if (l.lv === lv && l.week > w) w = l.week; }); return w || 1; };
@@ -2590,6 +2610,275 @@
     draw(); bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
   }
 
+  // ---------- приложение без Telegram (lbchinese.ru/go): вход, чат с Чиной, установка ----------
+  // Ключ ученика (k) выдаёт сайт после входа по почте или через Telegram; с ним работают все запросы к боту.
+  const SITE = "/api/";
+  const standalone = () => { try { return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch (e) { return false; } };
+  async function siteGet(path) { const r = await fetch(SITE + path, { credentials: "same-origin", cache: "no-store" }); return { status: r.status, data: await r.json().catch(() => null) }; }
+  async function sitePost(path, body) {
+    const r = await fetch(SITE + path, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-LB": "1" }, body: JSON.stringify(body || {}) });
+    return { status: r.status, data: await r.json().catch(() => null) };
+  }
+  function pwaKey(k) { PWK = k || ""; try { k ? localStorage.setItem("lb_k", k) : localStorage.removeItem("lb_k"); } catch (e) {} }
+  async function pwaBoot() {
+    dropNav();
+    let k = PWK;
+    for (let tries = 0; tries < 3; tries++) {
+      if (!k) k = await pwaLogin();
+      let r;
+      try { r = await apiPost("hello", { k, n: PWN, l: LANG }, 12000); }
+      catch (e) { S = Object.assign({}, DEMO, { tk: k, demo: 0, off: 1 }); toast("Нет связи — показываю то, что сохранено на телефоне"); return; }
+      if (r.status === 200 && r.data && typeof r.data.l === "number") {
+        S = Object.assign(r.data, { srv: 1, tk: r.data.tk || k }); PR = S.pr && S.pr.on ? S.pr : null; pwaKey(k);
+        if (PW_NEW && !legalOk()) await sendConsent(LEGAL_V, false);    // согласия уже отмечены при регистрации
+        chatPoll(); return;
+      }
+      pwaKey(""); k = "";     // ключ устарел или выдан другим ботом — входим заново
+    }
+  }
+  let PWN = "", PW_NEW = 0;
+  function pwaLogin() {
+    return new Promise(done => {
+      let mode = "in", tgPoll = 0;
+      const finish = async () => {
+        const r = await siteGet("app/key");
+        if (r.status === 200 && r.data && r.data.k) { if (tgPoll) clearInterval(tgPoll); PWN = r.data.name || PWN; done(r.data.k); return true; }
+        return false;
+      };
+      const draw = (err = "") => {
+        dropNav();
+        $app.innerHTML = `<div class="pw-login">
+          <div class="pw-dog">${chinaSVG("love")}</div>
+          <h1 class="pw-h">${mode === "in" ? "Привет! Я Чина" : "Давай знакомиться!"}</h1>
+          <p class="muted pw-sub">${mode === "in" ? "Войди, чтобы уроки и прогресс сохранялись" : "Аккаунт нужен, чтобы сохранять уроки и прогресс"}</p>
+          <form id="pwF" class="pw-form" novalidate>
+            ${mode === "up" ? `<label class="pw-f"><span>Как тебя зовут</span><input id="pwN" autocomplete="given-name" maxlength="60" value="${esc(PWN)}"></label>` : ""}
+            <label class="pw-f"><span>Почта</span><input id="pwE" type="email" inputmode="email" autocomplete="email" required></label>
+            <label class="pw-f"><span>Пароль${mode === "up" ? " — минимум 8 символов" : ""}</span><input id="pwP" type="password" autocomplete="${mode === "up" ? "new-password" : "current-password"}" required minlength="8"></label>
+            ${mode === "up" ? `<label class="pw-agree"><input type="checkbox" id="pwA"> <span>Принимаю <a href="${legalUrl("terms")}" target="_blank" rel="noopener">Пользовательское соглашение</a> и ознакомлен(а) с <a href="${legalUrl("privacy")}" target="_blank" rel="noopener">Политикой конфиденциальности</a></span></label>
+            <label class="pw-agree"><input type="checkbox" id="pwC"> <span>Даю <a href="${legalUrl("consent")}" target="_blank" rel="noopener">согласие на обработку персональных данных</a></span></label>
+            <p class="small muted" style="margin:0">Мне есть 14 лет, или согласие даёт мой родитель</p>` : ""}
+            ${err ? `<div class="pw-err" role="alert">${esc(err)}</div>` : ""}
+            <button class="primary" id="pwGo">${mode === "in" ? "Войти" : "Создать аккаунт"}</button>
+          </form>
+          <button class="pw-link" id="pwSw">${mode === "in" ? "Нет аккаунта? Создать" : "Уже есть аккаунт? Войти"}</button>
+          <div class="pw-or"><span>или</span></div>
+          <button class="secondary" id="pwTg">Войти через Telegram</button>
+          <p class="small muted pw-note">Уже учишься в боте @${BOT_USER}? Входи через Telegram — уроки, серия и слова будут те же.</p>
+        </div>`;
+        document.getElementById("pwSw").onclick = () => { mode = mode === "in" ? "up" : "in"; draw(); };
+        document.getElementById("pwF").onsubmit = async ev => {
+          ev.preventDefault();
+          const email = document.getElementById("pwE").value.trim(), password = document.getElementById("pwP").value;
+          if (mode === "up") PWN = document.getElementById("pwN").value.trim();
+          if (!/^\S+@\S+\.\S+$/.test(email)) return draw("Проверь адрес почты");
+          if (password.length < 8) return draw("Пароль — минимум 8 символов");
+          if (mode === "up" && !(document.getElementById("pwA").checked && document.getElementById("pwC").checked)) return draw("Отметь оба согласия");
+          const btn = document.getElementById("pwGo"); btn.disabled = true; btn.textContent = "Секунду…";
+          try {
+            const r = await sitePost(mode === "in" ? "auth/login" : "auth/register", mode === "in" ? { email, password } : { email, password, name: PWN, agree: 1 });
+            if (r.status !== 200 || !r.data || r.data.error) return draw((r.data && r.data.error) || "Не получилось — попробуй ещё раз");
+            if (mode === "up") PW_NEW = 1;
+            if (!(await finish())) draw("Не получилось войти — попробуй ещё раз");
+          } catch (e) { draw("Нет связи — проверь интернет"); }
+        };
+        document.getElementById("pwTg").onclick = async () => {
+          try {
+            const r = await sitePost("auth/start", {});
+            if (!r.data || !r.data.link) return draw((r.data && r.data.error) || "Не получилось — попробуй ещё раз");
+            window.open(r.data.link, "_blank");
+            const b = document.getElementById("pwTg"); b.disabled = true; b.textContent = "Жду подтверждения в Telegram…";
+            if (tgPoll) clearInterval(tgPoll);
+            tgPoll = setInterval(async () => {
+              const p = await siteGet("auth/poll").catch(() => null);
+              if (p && p.data && p.data.ok) { clearInterval(tgPoll); tgPoll = 0; await finish(); }
+              else if (p && p.data && p.data.expired) { clearInterval(tgPoll); tgPoll = 0; draw("Ссылка устарела — нажми ещё раз"); }
+            }, 2000);
+          } catch (e) { draw("Нет связи — проверь интернет"); }
+        };
+      };
+      finish().then(ok => { if (!ok) draw(); }).catch(() => draw());
+    });
+  }
+  async function pwaLogout() {
+    try { await sitePost("auth/logout", {}); } catch (e) {}
+    pwaKey(""); CHAT.items.clear(); CHAT.top = CHAT.vtop = 0;
+    location.replace(location.pathname);
+  }
+
+  // ---- кнопка «Назад» и системный жест «назад» ----
+  function pwaBack(push) {
+    if (!PWA) return;
+    let b = document.getElementById("pwBack");
+    if (!b) {
+      b = document.createElement("button"); b.id = "pwBack"; b.className = "pw-back"; b.type = "button"; b.setAttribute("aria-label", "Назад");
+      b.innerHTML = `<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      b.onclick = () => { haptic(); history.state && history.state.lb ? history.back() : goBack(); };
+      document.body.appendChild(b);
+      addEventListener("popstate", () => { if (depth) goBack(); });
+    }
+    b.hidden = !depth;
+    if (push) try { history.pushState({ lb: 1 }, ""); } catch (e) {}
+  }
+
+  // ---- установка на экран телефона ----
+  let installEv = null;
+  addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEv = e; const c = document.getElementById("pwInst"); if (c) c.hidden = false; });
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  function installCard() {
+    if (!PWA || standalone() || store.get("inst_no", 0) > Date.now()) return;
+    const c = document.createElement("div"); c.className = "pw-inst"; c.id = "pwInst";
+    c.hidden = !installEv && !isIOS();
+    c.innerHTML = `<img src="icon-192.png" alt=""><div class="grow"><b>Поставь Чину на экран телефона</b><span>Будет открываться как обычное приложение</span></div>
+      <button class="pw-inst-go">${isIOS() && !installEv ? "Как?" : "Установить"}</button><button class="pw-inst-x" aria-label="Скрыть">×</button>`;
+    c.querySelector(".pw-inst-x").onclick = () => { store.set("inst_no", Date.now() + 7 * 864e5); c.remove(); };
+    c.querySelector(".pw-inst-go").onclick = async () => {
+      if (installEv) { installEv.prompt(); try { await installEv.userChoice; } catch (e) {} installEv = null; c.remove(); return; }
+      const bg = document.createElement("div"); bg.className = "backdrop";
+      bg.innerHTML = `<div class="sheet"><div class="grab"></div><h2 style="font-size:21px">Как поставить Чину на iPhone</h2>
+        <ol class="pw-steps"><li>Открой эту страницу в <b>Safari</b>.</li><li>Нажми кнопку <b>«Поделиться»</b> — квадрат со стрелкой вверх внизу экрана.</li>
+        <li>Выбери <b>«На экран „Домой“»</b> и нажми <b>«Добавить»</b>.</li></ol>
+        <button class="primary" id="iosOk">Понятно</button></div>`;
+      bg.addEventListener("click", e => { if (e.target === bg || e.target.id === "iosOk") bg.remove(); });
+      document.body.appendChild(bg);
+    };
+    $app.prepend(c);
+  }
+
+  // ---- чат с Чиной ----
+  const CHAT = { top: 0, vtop: 0, items: new Map(), rk: [], timer: 0, fast: 0, open: false, busy: false };
+  const chatSeen = () => store.get("chat_seen", 0);
+  function tgHtml(s) {
+    const box = document.createElement("div");
+    box.innerHTML = String(s || "").replace(/\n/g, "<br>");
+    const OK = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, INS: 1, S: 1, STRIKE: 1, DEL: 1, CODE: 1, PRE: 1, A: 1, BR: 1, BLOCKQUOTE: 1, "TG-SPOILER": 1, SPAN: 1 };
+    const walk = el => [...el.childNodes].forEach(n => {
+      if (n.nodeType === 3) return;
+      if (n.nodeType !== 1 || !OK[n.tagName]) { if (n.nodeType === 1) { walk(n); n.replaceWith(...n.childNodes); } else n.remove(); return; }
+      [...n.attributes].forEach(a => { if (!(n.tagName === "A" && a.name === "href" && /^(https?:|tg:)/i.test(a.value))) n.removeAttribute(a.name); });
+      if (n.tagName === "A") { n.target = "_blank"; n.rel = "noopener"; }
+      walk(n);
+    });
+    walk(box);
+    return box.innerHTML;
+  }
+  function chatMerge(d) {
+    if (!d || !Array.isArray(d.items)) return false;
+    let changed = false;
+    d.items.forEach(it => { const old = CHAT.items.get(it.id); if (it.gone) { if (old) { CHAT.items.delete(it.id); changed = true; } return; }
+      if (!old || JSON.stringify(old) !== JSON.stringify(it)) { CHAT.items.set(it.id, it); changed = true; } });
+    CHAT.top = Math.max(CHAT.top, d.top || 0); CHAT.vtop = Math.max(CHAT.vtop, d.vtop || 0);
+    if (JSON.stringify(d.rk || []) !== JSON.stringify(CHAT.rk)) { CHAT.rk = d.rk || []; changed = true; }
+    return changed;
+  }
+  async function chatFetch() {
+    if (!PWA || !S.tk || CHAT.busy) return;
+    CHAT.busy = true;
+    try {
+      const r = await apiPost("inbox", { k: S.tk, a: CHAT.top, v: CHAT.vtop }, 9000);
+      if (r.status === 200 && chatMerge(r.data)) { if (CHAT.open) chatDraw(); else chatBadge(); }
+    } catch (e) {} finally { CHAT.busy = false; }
+  }
+  function chatPoll() {
+    if (CHAT.timer) clearTimeout(CHAT.timer);
+    const tick = () => { if (document.visibilityState !== "hidden") chatFetch(); CHAT.timer = setTimeout(tick, CHAT.open ? (Date.now() < CHAT.fast ? 1200 : 3500) : 30000); };
+    tick();
+  }
+  addEventListener("visibilitychange", () => { if (PWA && document.visibilityState === "visible" && S.tk) chatFetch(); });
+  const chatUnread = () => { let n = 0; const s = chatSeen(); CHAT.items.forEach(it => { if (it.out && it.id > s) n++; }); return n; };
+  function chatBadge() { const b = document.getElementById("askFab"); if (b) b.classList.toggle("dot", chatUnread() > 0 && !CHAT.open); }
+  function chatBubble(it) {
+    const media = !it.m ? "" : it.mt === "voice" || it.mt === "audio" ? `<audio controls preload="none" src="${esc(it.m)}"></audio>`
+      : it.mt === "photo" || it.mt === "sticker" ? `<img class="${it.mt === "sticker" ? "stk" : "ph"}" src="${esc(it.m)}" alt="" loading="lazy">`
+      : it.mt === "animation" || it.mt === "video" ? `<video src="${esc(it.m)}" ${it.mt === "animation" ? "autoplay loop muted playsinline" : "controls playsinline"}></video>`
+      : `<a href="${esc(it.m)}" target="_blank" rel="noopener">Файл</a>`;
+    const text = it.t ? `<div class="tx">${tgHtml(it.t)}</div>` : "";
+    if (!media && !text) return "";
+    const kb = (it.kb || []).map(row => `<div class="kbr">${row.map((b, i) => `<button type="button" data-cb="${esc(b.cb || "")}" data-url="${esc(b.url || b.app || "")}" data-pay="${b.pay ? 1 : ""}" data-mid="${it.id}">${esc(b.t)}</button>`).join("")}</div>`).join("");
+    return `<div class="msg ${it.out ? "in" : "me"}${it.mt === "sticker" && !text ? " bare" : ""}" data-id="${it.id}">${media}${text}${kb ? `<div class="kb">${kb}</div>` : ""}</div>`;
+  }
+  function chatDraw() {
+    const list = document.getElementById("chL"); if (!list) return;
+    const atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+    const its = [...CHAT.items.values()].sort((a, b) => a.id - b.id);
+    list.innerHTML = its.length ? its.map(chatBubble).join("") : `<div class="chat-empty">${chinaSVG("wow")}<p>Напиши Чине что-нибудь — по-русски или по-китайски. Можно голосом.</p></div>`;
+    const rk = document.getElementById("chRk");
+    if (rk) rk.innerHTML = CHAT.rk.flat().map(t => `<button type="button" data-rk="${esc(t)}">${esc(t)}</button>`).join("");
+    if (atEnd || !CHAT.drawn) list.scrollTop = list.scrollHeight;
+    CHAT.drawn = true;
+    const top = its.length ? its[its.length - 1].id : 0; if (top > chatSeen()) store.set("chat_seen", top);
+  }
+  async function chatSend(t) {
+    t = String(t || "").trim(); if (!t) return;
+    CHAT.fast = Date.now() + 40000;
+    try {
+      const r = await apiPost("msg", { k: S.tk, t }, 9000);
+      if (r.status !== 200) toast("Не получилось отправить — попробуй ещё раз");
+    } catch (e) { toast("Нет связи — проверь интернет"); }
+    chatFetch();
+  }
+  async function chatTap(b) {
+    haptic();
+    if (b.dataset.cb) {
+      CHAT.fast = Date.now() + 40000; b.classList.add("wait");
+      try { await apiPost("cb", { k: S.tk, id: +b.dataset.mid, d: b.dataset.cb }, 9000); } catch (e) { toast("Нет связи — проверь интернет"); }
+      setTimeout(chatFetch, 400); return;
+    }
+    if (b.dataset.pay) return toast("Оплата звёздами работает только в Telegram");
+    const u = b.dataset.url; if (!u) return;
+    const st = new RegExp(`^https://t\\.me/${BOT_USER}\\?start=(.+)$`).exec(u);
+    if (st) return chatSend("/start " + decodeURIComponent(st[1]));       // ссылка на этого же бота — выполняем здесь
+    if (/[?&]s=/.test(u) && /lbchinese-app|\/go\//.test(u)) { location.reload(); return; }   // «Открыть приложение» — оно уже открыто
+    window.open(u, "_blank", "noopener");
+  }
+  // голосовое: нажал — запись, нажал ещё раз — отправлено
+  let rec = null;
+  async function chatMic(btn) {
+    if (rec) { rec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) return toast("Запись голоса здесь не работает — напиши текстом");
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { return toast("Разреши доступ к микрофону в настройках"); }
+    const mime = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || "";
+    const parts = [], t0 = Date.now();
+    rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    rec.ondataavailable = e => e.data && e.data.size && parts.push(e.data);
+    const lab = document.getElementById("chRec"); btn.classList.add("on"); lab.hidden = false;
+    const tm = setInterval(() => { const s = Math.round((Date.now() - t0) / 1000); lab.textContent = `● Запись ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} — нажми ещё раз, чтобы отправить`; if (s >= 120) rec && rec.stop(); }, 250);
+    rec.onstop = async () => {
+      clearInterval(tm); stream.getTracks().forEach(x => x.stop()); btn.classList.remove("on"); lab.hidden = true; rec = null;
+      const dur = Math.max(1, Math.round((Date.now() - t0) / 1000));
+      const blob = new Blob(parts, { type: (parts[0] && parts[0].type) || mime || "audio/webm" });
+      if (dur < 1 || blob.size < 1500) return toast("Слишком коротко — скажи ещё раз");
+      const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
+      CHAT.fast = Date.now() + 60000;
+      try { const r = await apiPost("msg", { k: S.tk, voice: b64, mime: blob.type, dur }, 30000); if (r.status !== 200) toast("Не получилось отправить голосовое"); }
+      catch (e) { toast("Нет связи — проверь интернет"); }
+      chatFetch();
+    };
+    rec.start();
+  }
+  function chatScreen() {
+    ASKOFF = true; CHAT.open = true; CHAT.drawn = false; dropNav();
+    $app.innerHTML = `<div class="chat">
+      <div class="chat-head"><span class="me">${chinaSVG("happy")}</span><div class="grow"><b>Чина</b><small>учитель и друг · отвечает сразу</small></div></div>
+      <div class="chat-list" id="chL"></div>
+      <div class="chat-bar"><div class="chat-rk" id="chRk"></div><div class="chat-rec" id="chRec" hidden></div>
+        <form id="chF" class="chat-in"><textarea id="chT" rows="1" placeholder="Напиши Чине…" maxlength="2000" enterkeyhint="send"></textarea>
+          <button type="button" class="chat-mic" id="chMic" aria-label="Голосовое"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          <button class="chat-send" id="chS" aria-label="Отправить"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></svg></button></form></div></div>`;
+    const ta = document.getElementById("chT");
+    const fit = () => { ta.style.height = "auto"; ta.style.height = Math.min(120, ta.scrollHeight) + "px"; };
+    ta.addEventListener("input", fit);
+    ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad/.test(navigator.userAgent)) { e.preventDefault(); document.getElementById("chF").requestSubmit(); } });
+    document.getElementById("chF").onsubmit = e => { e.preventDefault(); const t = ta.value; ta.value = ""; fit(); chatSend(t); };
+    document.getElementById("chMic").onclick = e => chatMic(e.currentTarget);
+    $app.querySelector(".chat").addEventListener("click", e => {
+      const b = e.target.closest("button[data-mid]"); if (b) return chatTap(b);
+      const r = e.target.closest("button[data-rk]"); if (r) chatSend(r.dataset.rk);
+    });
+    chatDraw(); chatPoll();
+    cleanup = () => { CHAT.open = false; if (rec) try { rec.stop(); } catch (e) {} chatPoll(); };
+  }
+
   // ---------- старт ----------
   if (tg) {
     tg.ready(); tg.expand();
@@ -2599,5 +2888,6 @@
     try { tg.setHeaderColor(bgc); tg.setBackgroundColor(bgc); } catch (e) {}
   }
   const VIEW = new URLSearchParams(location.search).get("v");
-  Promise.all([load(), fetchState()]).then(() => loadLevel(S.l)).then(() => { setTimeout(loadRest, 30); setTimeout(loadExamples, 1500); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
+  if (PWA) document.documentElement.dataset.theme = "light";
+  Promise.all([load(), PWA ? pwaBoot() : fetchState()]).then(() => loadLevel(S.l)).then(() => { setTimeout(loadRest, 30); setTimeout(loadExamples, 1500); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
