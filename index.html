@@ -910,6 +910,18 @@ h2,h3,.title-big,.today-title,.hero h3,.prem-title,.top .name,.rv-head b,.greet{
 .ask-fab{position:fixed;right:max(14px,calc(50% - 246px));bottom:calc(86px + env(safe-area-inset-bottom));z-index:8;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px 0 11px;border:0;border-radius:999px;background:var(--navy,#13273F);color:#fff;font:600 13px/1 inherit;box-shadow:0 10px 26px -10px rgba(19,39,63,.5);cursor:pointer}
 .ask-fab svg{width:20px;height:20px}
 .ask-fab[hidden]{display:none}
+/* узкие телефоны: заголовок урока не уходит под картинку */
+@media (max-width:360px){.hero .hero3d{width:88px;height:88px;right:4px;top:6px}.hero h3{font-size:23px;max-width:72%;overflow-wrap:break-word;hyphens:auto}.hero .meta{max-width:78%}}
+/* словарь: разбор предложения по словам */
+.parse{background:var(--sheet,#fff);border:1px solid var(--rule);border-radius:18px;padding:14px 14px 12px;margin:0 0 14px}
+.parse-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.parse-say{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);border-radius:999px;padding:6px 12px;font:600 13px inherit;cursor:pointer}
+.parse-say svg{width:16px;height:16px}
+.parse-line{display:flex;flex-wrap:wrap;align-items:flex-end;gap:4px 2px;font-size:22px;line-height:1.2;margin-bottom:10px}
+.parse-line .pt{display:inline-flex;flex-direction:column;align-items:center;border:0;background:var(--paper2,#F3EEE8);border-radius:8px;padding:3px 5px;font:inherit;color:var(--ink);cursor:pointer}
+.parse-line .pt small{font-family:"Manrope",-apple-system,system-ui,sans-serif;font-size:11px;line-height:1.2;font-weight:500;color:#E8577F;margin-bottom:2px}
+.parse-line .pp{padding:0 2px 4px;color:var(--muted)}
+.parse .entry.pw{border-left:0;border-right:0;border-radius:0}
 /* приложение без Telegram (lbchinese.ru/go): вход, «Назад», установка, чат */
 .pw-login{max-width:420px;margin:0 auto;padding:4vh 4px 40px;display:flex;flex-direction:column;align-items:stretch}
 .pw-dog{width:120px;height:120px;border-radius:50%;overflow:hidden;align-self:center;background:var(--grad-soft,#FBE3EC);box-shadow:0 14px 34px -16px rgba(255,111,145,.55)}
@@ -931,6 +943,9 @@ h2,h3,.title-big,.today-title,.hero h3,.prem-title,.top .name,.rv-head b,.greet{
 .pw-back{position:fixed;left:max(12px,calc(50% - 248px));top:calc(10px + env(safe-area-inset-top));z-index:9;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:var(--ink);box-shadow:0 6px 18px -8px rgba(27,37,65,.35);display:grid;place-items:center;cursor:pointer}
 .pw-back svg{width:22px;height:22px}
 .pw-back[hidden]{display:none}
+body:has(#pwBack) .backlink{display:none}
+.plan.wait{opacity:.55}
+#ykY small{color:var(--muted)}
 body:has(.pw-back:not([hidden])) #app{padding-top:calc(56px + env(safe-area-inset-top))}
 .pw-inst{display:flex;align-items:center;gap:12px;padding:12px 12px 12px 12px;margin:0 0 16px;border-radius:18px;background:var(--sheet,#fff);border:1px solid var(--rule);box-shadow:0 10px 26px -18px rgba(27,37,65,.35)}
 .pw-inst[hidden]{display:none}
@@ -938,6 +953,8 @@ body:has(.pw-back:not([hidden])) #app{padding-top:calc(56px + env(safe-area-inse
 .pw-inst b{display:block;font-size:15px}
 .pw-inst span{font-size:12.5px;color:var(--muted)}
 .pw-inst-go{border:0;border-radius:999px;padding:9px 14px;font:600 14px inherit;color:#fff;background:var(--grad-btn,linear-gradient(100deg,#FF8A5B,#FF6F91 55%,#A47CFF));cursor:pointer;flex:none}
+.pw-bell{width:44px;height:44px;border-radius:11px;flex:none;display:grid;place-items:center;font-size:24px;background:var(--grad-soft,#FBE3EC)}
+.pw-bell-i{font-size:18px;display:grid;place-items:center}
 .pw-inst-x{border:0;background:none;color:var(--muted);font-size:22px;line-height:1;padding:4px;cursor:pointer;flex:none}
 .pw-steps{margin:12px 0 18px;padding-left:22px;display:grid;gap:8px;font-size:16px;line-height:1.45}
 .ask-fab.dot::after{content:"";position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#FF4D6D;border:2px solid var(--paper)}

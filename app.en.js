@@ -463,7 +463,7 @@
     pwaBack(depth && !_back);
     screen();
     askFab();
-    if (PWA && screen === home) installCard();
+    if (PWA && screen === home) { installCard(); pushCard(); }
   }
   // кнопка «Спросить учителя» внизу каждого экрана (кроме экзамена на время)
   function screenCtx() {
@@ -537,7 +537,10 @@
     const me = Math.min(9, Math.max(1, +S.l || 1)), order = [];
     for (let l = me - 1; l >= 1; l--) order.push(l);
     for (let l = me + 1; l <= 9; l++) order.push(l);
-    for (const l of order) { try { await loadLevel(l); } catch (e) {} }
+    // по три файла одновременно: быстрее, чем по одному, и не забивает слабый мобильный интернет
+    let next = 0;
+    const worker = async () => { while (next < order.length) { const l = order[next++]; try { await loadLevel(l); } catch (e) {} } };
+    await Promise.all([worker(), worker(), worker()]);
     allReady = true; allDone(true);
   }
   // уровень ученика сменился, а его файл ещё не пришёл — коротко ждём
@@ -1071,6 +1074,10 @@
       if (ls) ls.insertAdjacentHTML("beforeend", `<button class="item" id="pwChat">${icon("ask")}<div class="grow"><div class="t">Чат с Чиной</div><div class="s">Уроки, учитель и разговор — как в боте</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="pwOut">${icon("user")}<div class="grow"><div class="t">Выйти</div><div class="s">Прогресс сохранится — войдёшь снова по почте или через Telegram</div></div>${icon("chev", "i chev")}</button>`);
       const c = document.getElementById("pwChat"); if (c) c.onclick = () => go(chatScreen);
+      if (pushOk()) { document.getElementById("pwOut").insertAdjacentHTML("beforebegin", `<button class="item" id="pwPush"><span class="i pw-bell-i">🔔</span><div class="grow"><div class="t">Phone notifications</div><div class="s" id="pwPushS">…</div></div>${icon("chev", "i chev")}</button>`);
+        const ps = document.getElementById("pwPushS"), pb = document.getElementById("pwPush");
+        const show = async () => { const on = Notification.permission === "granted" && !!(await pushSub()); ps.textContent = on ? "On — tap to turn off" : "Off — tap to turn on"; return on; };
+        show(); pb.onclick = async () => { haptic(); (await show()) ? await pushDisable() : await pushEnable(); show(); }; }
       const o = document.getElementById("pwOut"); if (o) o.onclick = () => ask("Выйти из аккаунта на этом телефоне?", pwaLogout); }
     const on = (id, fn) => { const el = document.getElementById(id); el && el.addEventListener("click", () => { haptic(); fn(); }); };
     on("lvl", () => ask("Take the placement test in the bot chat?", () => send({ t: "level" })));
@@ -1148,6 +1155,7 @@
     const ft = $app.querySelector(".foot");
     if (ft) { ft.insertAdjacentHTML("beforebegin", `<p class="small muted center" style="margin:14px 0 0">${L("Оплачивая подписку, ты принимаешь ", "By paying, you accept the ")}<a href="#" data-doc="terms">${L("условия оферты", "Terms of Service")}</a>${L(". Месячная подписка Stars продлевается автоматически, отключить — /pay.", ". The monthly Stars subscription renews automatically; turn it off with /pay.")}</p>`);
       $app.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); openDoc(x.dataset.doc); }); }
+    if (PWA) pwaPremium();
   }
 
   // ---------- настройка пиньиня ----------
@@ -1471,7 +1479,8 @@
   }
 
   // ---------- словарь ----------
-  function dictionary() { if (!allReady) return waitAll(dictionary); markSeen("dict");
+  function dictionary() { markSeen("dict");
+    if (!allReady) { const tok = seqTok; allP.then(() => { if (tok === seqTok && CUR && CUR.fn === dictionary) { const y = window.scrollY, f = document.activeElement && document.activeElement.id === "q"; dictionary(); window.scrollTo(0, y); const q = document.getElementById("q"); if (f && q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } } }); }   // слова остальных уровней догружаются — потом обновим список
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Back</button>`}
       <h2 style="font-size:24px;margin-bottom:12px">Dictionary</h2>
       <button class="wide w-scan" id="scanD" style="margin:0 0 12px"><span class="round r3d">${i3("scan", "i3r")}</span><span class="grow"><span class="t">Text scanner${lockMark("scan")}</span><br><span class="s">Snap a text — I'll translate and break it down</span></span>${icon("chev", "i chev")}</button>
@@ -1485,8 +1494,10 @@
     document.getElementById("scanD").onclick = () => { haptic(); can("scan") ? go(scanScreen) : go(() => premiumScreen("scan")); };
     const input = document.getElementById("q");
     const plain = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s/g, "");
+    // в списках HSK 3.0 часть слов записана с необязательной частью: 有（一）点儿, 有时（候）, 差（一）点儿, 要不（然）
+    const ALIAS = { "有一点儿": "有点儿", "有一点": "有点儿", "有时候": "有时", "差一点儿": "差点儿", "差一点": "差点儿", "要不然": "要不" };
     const render = () => {
-      const raw = dictQuery.trim(), q = plain(raw);
+      const raw0 = dictQuery.trim(), raw = ALIAS[raw0] || raw0, q = plain(raw);
       let arr = dictLevel ? (byLevel[dictLevel] || []) : [1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap(l => byLevel[l] || []);
       if (raw) {
         // точные совпадения выше: иероглиф → пиньинь (с тонами, если их ввели) → перевод
@@ -1513,12 +1524,40 @@
         + (arr.length > shown.length ? `<p class="center muted small" style="padding:16px">${arr.length - shown.length} more — narrow your search</p>` : "")
         + (!arr.length ? `<p class="center muted" style="padding:32px">Nothing found</p>` : "");
       document.querySelectorAll(".entry").forEach(el => el.onclick = () => wordSheet(word(el.dataset.h)));
+      parseBox(raw0, arr.length && arr[0].h === raw);
       bigDict(raw, new Set(shown.map(w => w.h)));
     };
     input.oninput = () => { dictQuery = input.value; render(); };
     document.getElementById("hwBtn").onclick = e => { e.preventDefault(); haptic(); handSheet(ch => { dictQuery = (input.value || "") + ch; input.value = dictQuery; render(); }); };
     document.querySelectorAll(".tab").forEach(b => b.onclick = () => { dictLevel = +b.dataset.l; haptic(); dictionary(); });
     render();
+  }
+  // ---------- разбор предложения или текста по словам ----------
+  let parseT = 0, parseSeq = 0;
+  function parseBox(raw, exact) {
+    clearTimeout(parseT);
+    const box = document.getElementById("list"); if (!box) return;
+    let el = document.getElementById("parse");
+    if (!el) { el = document.createElement("div"); el.id = "parse"; box.before(el); }
+    const han = (raw.match(/[㐀-鿿]/g) || []).length;
+    // одно слово ищем как обычно; разбираем, если введено предложение, фраза или несколько слов
+    if (han < 2 || exact || (han <= 4 && !/[\s，。！？、,.!?；;：:]/.test(raw) && P.words.has(raw))) { el.innerHTML = ""; return; }
+    const my = ++parseSeq;
+    el.innerHTML = `<p class="muted small" style="padding:6px 2px">${L("Разбираю по словам…", "Splitting into words…")}</p>`;
+    parseT = setTimeout(async () => {
+      let r = null;
+      try { r = await apiPost("dict", { s: raw }, 9000); } catch (e) {}
+      if (my !== parseSeq || !document.getElementById("parse")) return;
+      const toks = r && r.status === 200 && r.data && Array.isArray(r.data.t) ? r.data.t : [];
+      if (!toks.some(t => t[3] >= 0)) { el.innerHTML = ""; return; }
+      const words = toks.filter(t => t[3] >= 0);
+      el.innerHTML = `<div class="parse"><div class="parse-h"><b>${L("Разбор по словам", "Word by word")}</b><button type="button" class="parse-say" id="pSay">${icon("sound")}${L("Послушать", "Listen")}</button></div>
+        <div class="parse-line zh">${toks.map((t, i) => t[3] < 0 ? `<span class="pp">${esc(t[0])}</span>` : `<button type="button" class="pt" data-pi="${i}"><small>${esc(t[1])}</small>${esc(t[0])}</button>`).join("")}</div>
+        ${words.map(t => `<button type="button" class="entry pw" data-pi="${toks.indexOf(t)}"><span class="h zh">${esc(t[0])}</span><span>${pyH(t[1], "p", true)}<div class="m">${esc(t[2])}</div></span><span class="lv">${t[3] ? hsk(t[3]) : ""}</span></button>`).join("")}
+        <p class="muted small" style="margin:8px 2px 0">${L("Слова разделены по словарю. Нажми на слово — откроется карточка с примерами и озвучкой.", "Words are split using the dictionary. Tap a word for its card with examples and audio.")}</p></div>`;
+      document.getElementById("pSay").onclick = () => { haptic(); speak(raw.replace(/\s+/g, "").slice(0, 60)); };
+      el.querySelectorAll("[data-pi]").forEach(b => b.onclick = () => { haptic(); const t = toks[+b.dataset.pi]; const w = word(t[0]); w ? wordSheet(w) : bkrsSheet(t[0]); });
+    }, 380);
   }
   // ---------- большой словарь: поиск на сервере (≈3 млн статей, примеры) ----------
   let bigT = 0, bigSeq = 0;
@@ -2045,7 +2084,16 @@
   function playClip(aid, lines, noVoiceMsg) {
     return new Promise(res => {
       stopAudio();
+      let srv = lines.length === 1 && lines[0][1].length <= 60 && /[\u3400-\u9fff]/.test(lines[0][1]);
       const fallback = () => {
+        if (srv) {     // озвучка с сервера: любое слово и фраза, даже если готового файла нет
+          srv = false;
+          const b = new Audio(API + "say?t=" + encodeURIComponent(lines[0][1])); curAudio = b;
+          b.onended = () => res(true);
+          b.onerror = () => { if (curAudio === b) { curAudio = null; fallback(); } };
+          b.play().catch(() => { if (curAudio === b) { curAudio = null; fallback(); } });
+          return;
+        }
         if (!zhVoice) { const m = noVoiceMsg === undefined ? "No Chinese voice on this device — open the transcript" : noVoiceMsg; if (m) toast(m); return res(false); }
         speechSynthesis.cancel();
         lines.forEach(([who, t], k) => { const u = new SpeechSynthesisUtterance(t); u.voice = zhVoice; u.lang = zhVoice.lang; u.rate = .9;
@@ -2630,7 +2678,9 @@
       catch (e) { S = Object.assign({}, DEMO, { tk: k, demo: 0, off: 1 }); toast("Offline — showing what's saved on this phone"); return; }
       if (r.status === 200 && r.data && typeof r.data.l === "number") {
         S = Object.assign(r.data, { srv: 1, tk: r.data.tk || k }); PR = S.pr && S.pr.on ? S.pr : null; pwaKey(k);
-        if (PW_NEW && !legalOk()) await sendConsent(LEGAL_V, false);    // согласия уже отмечены при регистрации
+        if (PW_NEW && !legalOk()) await sendConsent(LEGAL_V, false);
+        await payCheck();
+        if (pushOk() && Notification.permission === "granted") pushEnable(true);     // новый телефон или подписка сменилась    // согласия уже отмечены при регистрации
         chatPoll(); return;
       }
       pwaKey(""); k = "";     // ключ устарел или выдан другим ботом — входим заново
@@ -2707,6 +2757,90 @@
   }
 
   // ---- кнопка «Back» и системный жест «назад» ----
+
+  // ---- оплата картой (ЮKassa) ----
+  async function payCheck() {
+    const pid = store.get("paying", "");
+    try { if (/[?&]paid=/.test(location.search)) history.replaceState(null, "", location.pathname); } catch (e) {}
+    if (!pid) return;
+    for (let i = 0; i < 4; i++) {
+      let r; try { r = await apiPost("paycheck", { k: S.tk, id: pid }, 15000); } catch (e) { return; }
+      const st = r.data && r.data.status;
+      if (r.status === 404 || st === "canceled") { store.set("paying", ""); if (st === "canceled") setTimeout(() => toast("The payment didn't go through — you can try again"), 1200); return; }
+      if (st === "succeeded") { store.set("paying", ""); if (r.data.state) { S = Object.assign(r.data.state, { srv: 1, tk: r.data.state.tk || S.tk }); PR = S.pr && S.pr.on ? S.pr : null; }
+        setTimeout(() => toast("Payment received — Premium is on 🎉"), 1200); return; }
+      await new Promise(res => setTimeout(res, 2500));
+    }
+    setTimeout(() => toast("The payment is still being checked — Premium will turn on by itself in a couple of minutes"), 1200);
+  }
+  async function ykBuy(code, btn) {
+    haptic(); btn.disabled = true; const t = btn.innerHTML; btn.classList.add("wait");
+    try {
+      const r = await apiPost("pay", { k: S.tk, p: code }, 25000);
+      if (r.status === 200 && r.data && r.data.url) { store.set("paying", r.data.id); location.href = r.data.url; return; }
+      toast(r.status === 503 ? "Card payments are not available yet" : "Couldn't open the payment page — please try again");
+    } catch (e) { toast("No connection — check your internet"); }
+    btn.disabled = false; btn.classList.remove("wait"); btn.innerHTML = t;
+  }
+  function pwaPremium() {
+    const rub = n => Number(n).toLocaleString("ru-RU") + " ₽";
+    $app.querySelectorAll(".plans").forEach(el => { const pv = el.previousElementSibling, nx = el.nextElementSibling;
+      if (pv && pv.classList.contains("label")) pv.remove(); if (nx && nx.tagName === "P" && nx.classList.contains("center")) nx.remove(); el.remove(); });
+    $app.querySelectorAll(".prem-founder, .prem-code").forEach(el => el.remove());
+    $app.querySelectorAll("p.small.muted.center").forEach(el => { if (el.querySelector("[data-doc]")) el.remove(); });
+    const ft = $app.querySelector(".foot"); if (ft) ft.innerHTML = "Card or SBP payments via YooKassa. Payment questions — write in the chat with Chína: /paysupport<br>© 2026 LinguaBridge · Arseneva A. P. Copying materials without permission is prohibited.";
+    const y = (PR.yk || [])[2], q = (PR.yk || [])[1], m = (PR.yk || [])[0];
+    const box = !(PR.yk && PR.yk.length) ? `<div class="pcard prem-code"><b>Card payments coming soon</b><p class="small muted" style="margin:4px 0 0">For now, Premium can be purchased in the Telegram bot @${BOT_USER}.</p></div>`
+      : `<div class="label" style="margin-top:18px">By card or SBP</div><div class="plans">
+        <button class="plan best" id="ykY"><span class="tag">Best value</span><b>Year</b><span class="price">${rub(y)}</span><small>≈${rub(Math.round(y / 12))}/mo · ≈${Math.max(1, Math.round(y / 365))} ₽ a day</small></button>
+        <button class="plan" id="ykQ"><b>3 months</b><span class="price">${rub(q)}</span><small>≈${rub(Math.round(q / 3))}/mo</small></button>
+        <button class="plan" id="ykM"><b>Month</b><span class="price">${rub(m)}</span><small>≈${Math.max(1, Math.round(m / 30))} ₽ a day</small></button></div>
+        <p class="center muted small" style="margin-top:8px">One-time payment, no auto-renewal — Chína will remind you a week before it ends. By paying, you accept the <a href="#" data-doc="terms">Terms of Service</a>.</p>`;
+    const head = $app.querySelector("#urgP") || $app.querySelector(".prem-head");
+    if (head) head.insertAdjacentHTML("afterend", box);
+    [["ykY", "y"], ["ykQ", "q"], ["ykM", "m"]].forEach(([id, c]) => { const b = document.getElementById(id); if (b) b.onclick = () => ykBuy(c, b); });
+    $app.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); openDoc(x.dataset.doc); });
+  }
+
+
+  // ---- уведомления на телефон (Web Push) ----
+  const pushOk = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const b64uBytes = x => { const b = atob((x + "===".slice((x.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+  async function pushSub() { try { const r = await navigator.serviceWorker.ready; return await r.pushManager.getSubscription(); } catch (e) { return null; } }
+  async function pushEnable(quiet) {
+    if (!pushOk()) { if (!quiet) toast(isIOS() && !standalone() ? "On iPhone, notifications work once Chína is on your Home Screen" : "This browser can't show notifications"); return false; }
+    let perm = Notification.permission;
+    if (perm === "default" && !quiet) { try { perm = await Notification.requestPermission(); } catch (e) {} }
+    if (perm !== "granted") { if (!quiet) toast("Notifications are blocked — allow them for Chína in your phone settings"); return false; }
+    try {
+      const kr = await apiPost("push", { op: "key" }, 8000), key = kr.data && kr.data.key;
+      if (!key) throw new Error("key");
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(key) });
+      const r = await apiPost("push", { k: S.tk, op: "on", sub: sub.toJSON() }, 8000);
+      if (r.status === 200) { store.set("push", 1); if (!quiet) toast("Done — Chína will send you notifications 🔔"); return true; }
+    } catch (e) {}
+    if (!quiet) toast("Couldn't turn on notifications — please try again");
+    return false;
+  }
+  async function pushDisable() {
+    const sub = await pushSub();
+    try { await apiPost("push", { k: S.tk, op: "off", ep: sub ? sub.endpoint : "" }, 8000); } catch (e) {}
+    try { if (sub) await sub.unsubscribe(); } catch (e) {}
+    store.set("push", 0); toast("Notifications off");
+  }
+  function pushCard() {
+    if (!PWA || !pushOk() || Notification.permission === "granted" || Notification.permission === "denied" || store.get("push_no", 0) > Date.now()) return;
+    const c = document.createElement("div"); c.className = "pw-inst pw-push";
+    c.innerHTML = `<span class="pw-bell">🔔</span><div class="grow"><b>Turn on reminders</b><span>Chína will remind you about lessons and reply even when the app is closed</span></div>
+      <button class="pw-inst-go">Turn on</button><button class="pw-inst-x" aria-label="Hide">×</button>`;
+    c.querySelector(".pw-inst-x").onclick = () => { store.set("push_no", Date.now() + 5 * 864e5); c.remove(); };
+    c.querySelector(".pw-inst-go").onclick = async () => { if (await pushEnable()) c.remove(); };
+    $app.prepend(c);
+  }
+  if (PWA && "serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data && e.data.lb === "chat" && S.tk) go(chatScreen); });
+
   function pwaBack(push) {
     if (!PWA) return;
     let b = document.getElementById("pwBack");
@@ -2889,5 +3023,5 @@
   }
   const VIEW = new URLSearchParams(location.search).get("v");
   if (PWA) document.documentElement.dataset.theme = "light";
-  Promise.all([load(), PWA ? pwaBoot() : fetchState()]).then(() => loadLevel(S.l)).then(() => { setTimeout(loadRest, 30); setTimeout(loadExamples, 1500); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Couldn't load the course<p class="muted small">${esc(e.message)}</p></div>`; });
+  Promise.all([load(), PWA ? pwaBoot() : fetchState()]).then(() => loadLevel(S.l)).then(() => { setTimeout(loadRest, 30); setTimeout(loadExamples, 1500); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : PWA && new URLSearchParams(location.search).has("chat") ? go(chatScreen) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Couldn't load the course<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
