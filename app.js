@@ -434,6 +434,7 @@
   let cleanup = null;   // таймеры и звук экрана, который закрываем
   // история экранов: «Назад» возвращает на предыдущий экран (и на то же место прокрутки), а не всегда на главную
   let NAV = [], CUR = null;
+  let ASKCTX = null, ASKOFF = false;   // о чём сейчас экран (для вопроса учителю); на экзамене кнопка скрыта
   function go(screen, sub = true, _back = false) {
     if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
     try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
@@ -443,10 +444,32 @@
       else if (CUR && CUR.fn !== screen) { NAV.push({ fn: CUR.fn, sub: CUR.sub, y: window.scrollY }); if (NAV.length > 20) NAV.shift(); }
     }
     CUR = { fn: screen, sub };
+    ASKCTX = null; ASKOFF = false;
     depth = sub ? 1 : 0; window.scrollTo(0, 0);
     document.querySelectorAll("nav.nav").forEach(n => n.remove());
     if (tg) depth ? tg.BackButton.show() : tg.BackButton.hide();
     screen();
+    askFab();
+  }
+  // кнопка «Спросить учителя» внизу каждого экрана (кроме экзамена на время)
+  function screenCtx() {
+    if (ASKCTX) return ASKCTX;
+    if (CUR && CUR.fn === home) return "";
+    const h = $app.querySelector("h1, h2, .eyebrow"), z = $app.querySelector(".zh");
+    const t = [h && h.textContent.trim(), z && z.textContent.trim().slice(0, 300)].filter(Boolean).join("\n");
+    return t ? "Экран приложения: " + t.slice(0, 600) : "";
+  }
+  function askFab() {
+    let b = document.getElementById("askFab");
+    if (!b) {
+      b = document.createElement("button"); b.id = "askFab"; b.className = "ask-fab"; b.type = "button";
+      b.innerHTML = icon("ask") + "<span>Спросить учителя</span>";
+      b.onclick = () => { haptic();
+        let sel = ""; try { sel = String(window.getSelection() || "").trim(); } catch (e) {}
+        askSheet(/[\u3400-\u9fff]/.test(sel) && sel.length < 40 ? `Что значит «${sel}»?` : "", screenCtx()); };
+      document.body.appendChild(b);
+    }
+    b.hidden = ASKOFF || S.demo;
   }
   const toHome = () => go(home, false);
   function goBack() {
@@ -1432,7 +1455,7 @@
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <h2 style="font-size:24px;margin-bottom:12px">Словарь</h2>
       <button class="wide w-scan" id="scanD" style="margin:0 0 12px"><span class="round r3d">${i3("scan", "i3r")}</span><span class="grow"><span class="t">Сканер текста${lockMark("scan")}</span><br><span class="s">Сфотографируй текст — переведу и разберу</span></span>${icon("chev", "i chev")}</button>
-      <label class="search">${icon("search")}<input id="q" placeholder="Иероглиф, пиньинь или перевод" value="${esc(dictQuery)}" autocomplete="off"></label>
+      <label class="search">${icon("search")}<input id="q" placeholder="Иероглиф, пиньинь или перевод" value="${esc(dictQuery)}" autocomplete="off"><button type="button" class="hw-btn" id="hwBtn" aria-label="Написать иероглиф пальцем">✍︎<span>Написать</span></button></label>
       <div class="tabs">${[0, ...LEVELS].map(l => `<button class="tab ${dictLevel === l ? "on" : ""}" data-l="${l}">${l ? hsk(l) : "Все"}</button>`).join("")}</div>
       ${dictLevel >= 7 ? note79(true) : ""}
       <div id="list"></div>`;
@@ -1473,6 +1496,7 @@
       bigDict(raw, new Set(shown.map(w => w.h)));
     };
     input.oninput = () => { dictQuery = input.value; render(); };
+    document.getElementById("hwBtn").onclick = e => { e.preventDefault(); haptic(); handSheet(ch => { dictQuery = (input.value || "") + ch; input.value = dictQuery; render(); }); };
     document.querySelectorAll(".tab").forEach(b => b.onclick = () => { dictLevel = +b.dataset.l; haptic(); dictionary(); });
     render();
   }
@@ -1527,7 +1551,7 @@
     const bg = document.createElement("div"); bg.className = "backdrop";
     bg.innerHTML = `<div class="sheet center"><div class="grab"></div><div class="big zh">${esc(w.h)}</div>${pyH(w.p, "py", true)}
       <div class="ru">${esc(w.m)}</div><button class="sound" id="say">${icon("sound")}Послушать</button>
-      ${w.hint || exsOf(w).length ? `<div class="note">${esc(w.hint)}${exsOf(w).slice(0, 3).map(e => `<div style="margin-top:8px"><span class="zh">${esc(e[0])}</span><br><span class="small muted">${esc(e[2])}</span></div>`).join("")}</div>` : ""}
+      ${w.hint || exsOf(w).length ? `<div class="note">${esc(w.hint)}${exsOf(w).slice(0, 3).map(e => `<div style="margin-top:8px"><span class="zh">${esc(e[0])}</span>${e[1] ? pyH(e[1]) : "<br>"}<span class="small muted">${esc(e[2])}</span></div>`).join("")}</div>` : ""}
       <p class="muted small" style="margin-top:16px">${hsk(w.lv)}${l ? ` · неделя ${l.week}, день ${l.day}` : ""}</p></div>`;
     bg.querySelector("#say").onclick = e => { e.stopPropagation(); speak(w.h); };
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
@@ -1606,7 +1630,7 @@
       ${chars.map(c => `<div class="small muted" style="margin-top:6px"><span class="zh">${esc(c.h)}</span> ${pyH(c.p, "py-in", true, "span")} — ${esc(c.m)}</div>`).join("")}
       <p class="muted small" style="margin-top:8px">${w ? hsk(w.lv) : g ? "Вне списка HSK" : ""}</p>
       <button class="sound" id="say">${icon("sound")}Послушать</button>
-      ${w && w.ex ? `<div class="note"><span class="zh">${esc(w.ex)}</span><br><span class="small muted">${esc(w.ext)}</span></div>` : ""}
+      ${w && w.ex ? `<div class="note"><span class="zh">${esc(w.ex)}</span>${w.exp ? pyH(w.exp) : "<br>"}<span class="small muted">${esc(w.ext)}</span></div>` : ""}
       <div class="row" style="margin-top:18px;gap:8px">${(m && !mine) ? `<button class="primary" id="learn">Учить: в словарь и повторение</button>` : `<button class="secondary" disabled>${mine ? "Уже в твоём словаре ✓" : "Нет перевода"}</button>`}</div></div>`;
     bg.querySelector("#say").onclick = e => { e.stopPropagation(); speak(h); };
     const lb = bg.querySelector("#learn"); if (lb) lb.onclick = e => { e.stopPropagation(); learnWord(h, p, m); bg.remove(); };
@@ -1948,6 +1972,7 @@
   }
   function scanResult(res) {
     lastScan = res;
+    ASKCTX = "Текст из сканера:\n" + String(res.text || "").slice(0, 1000) + (res.tr ? "\nПеревод: " + String(res.tr).slice(0, 400) : "");
     const dict = {}; (res.words || []).forEach(([h, p, m]) => { dict[h] = [p, m]; SCANG[h] = [p, m]; });
     const mine = new Set(myWords().map(x => x[0]));
     const html = scanSegment(res.text, dict).map(([t, han]) => han ? `<span class="tw" data-w="${esc(t)}">${esc(t)}</span>` : esc(t)).join("").replace(/\n/g, "<br>");
@@ -1961,6 +1986,7 @@
         <div class="pcard" style="padding:4px 14px">${res.words.map(([h, p, m], i) => `<div class="scan-w"><button class="grow scan-wb" data-w="${esc(h)}"><span class="zh">${esc(h)}</span> ${pyH(p, "py-in", true, "span")}<br><span class="small">${esc(m)}</span></button>
           <button class="scan-add ${mine.has(h) ? "on" : ""}" data-i="${i}" aria-label="В повторение">${mine.has(h) ? "✓" : "+"}</button></div>`).join("")}</div>
         <button class="primary" id="addAll" style="margin-top:12px">Все слова в словарь и повторение</button>` : ""}
+      <button class="wide ask-row" id="askScan" style="margin-top:14px"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Спросить учителя про этот текст</span><br><span class="s">Непонятное слово, конструкция или перевод — учитель увидит текст</span></span>${icon("chev", "i chev")}</button>
       <div class="actions" style="margin-top:10px"><button class="secondary" id="again">Новый скан</button></div>`;
     navBar("dict");
     const bk = document.getElementById("bk"); if (bk) bk.onclick = () => go(scanScreen, false);
@@ -1979,6 +2005,7 @@
     $app.querySelectorAll(".scan-add").forEach(b => b.onclick = () => { if (b.classList.contains("on")) return; haptic(); b.classList.add("on"); b.textContent = "✓"; addList([res.words[+b.dataset.i]]); });
     const aa = document.getElementById("addAll"); if (aa) aa.onclick = () => { haptic(); $app.querySelectorAll(".scan-add").forEach(b => { b.classList.add("on"); b.textContent = "✓"; }); addList(res.words.filter(w => !mine.has(w[0]))); };
     document.getElementById("again").onclick = () => go(scanScreen, false);
+    document.getElementById("askScan").onclick = () => { haptic(); askSheet("", ASKCTX); };
   }
 
   function myDictionary() {
@@ -2103,6 +2130,7 @@
     return null;
   }
   function examRun(ex, secIds, full, resume) {
+    ASKOFF = true; const af = document.getElementById("askFab"); if (af) af.hidden = true;
     const secs = ex.sections.filter(s => secIds.includes(s.id));
     const ans = {}, plays = {};
     let si = 0, ui = 0, units = unitsOf(secs[0]), deadline = 0, timer = null, dictOn = !full;
@@ -2355,14 +2383,45 @@
     } catch (e) {}
     return sendP(payload);
   }
-  function askSheet(prefill = "") { markSeen("ask");
+  // рукописный ввод: пишешь пальцем — выбираешь иероглиф (распознавание прямо в телефоне, handwrite.js)
+  let hwScript = null;
+  function handSheet(onPick) {
+    const bg = document.createElement("div"); bg.className = "backdrop";
+    bg.innerHTML = `<div class="sheet hw-sheet"><div class="grab"></div><h2 style="font-size:20px">Напиши иероглиф</h2>
+      <p class="muted small" style="margin-top:2px">Пиши черты по порядку — так распознаётся точнее</p>
+      <canvas class="hw-pad" id="hwPad"></canvas>
+      <div class="hw-cands" id="hwC"><span class="muted small">Загружаю распознавание…</span></div>
+      <div class="row" style="gap:8px;margin-top:10px"><button class="secondary" id="hwU">Отменить</button><button class="secondary" id="hwX">Стереть</button><button class="primary" id="hwOk">Готово</button></div></div>`;
+    document.body.appendChild(bg);
+    const cands = bg.querySelector("#hwC");
+    const show = strokes => {
+      if (!window.Handwrite || !Handwrite._db()) return;
+      if (!strokes.length) { cands.innerHTML = `<span class="muted small">Варианты появятся здесь</span>`; return; }
+      const m = Handwrite.match(strokes, 10);
+      cands.innerHTML = m.map(c => `<button class="zh" data-c="${esc(c)}">${esc(c)}</button>`).join("") || `<span class="muted small">Не узнала — попробуй ещё раз</span>`;
+    };
+    const start = () => {
+      const pad = Handwrite.pad(bg.querySelector("#hwPad"), show);
+      Handwrite.load("hanzi_strokes.json").then(() => show(pad.strokes())).catch(() => { cands.innerHTML = `<span class="muted small">Не загрузилось — проверь интернет</span>`; });
+      bg.querySelector("#hwU").onclick = e => { e.stopPropagation(); pad.undo(); };
+      bg.querySelector("#hwX").onclick = e => { e.stopPropagation(); pad.clear(); };
+    };
+    if (window.Handwrite) start();
+    else { hwScript = hwScript || new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "handwrite.js?v=2"; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+      hwScript.then(start).catch(() => { cands.innerHTML = `<span class="muted small">Не загрузилось — проверь интернет</span>`; }); }
+    cands.onclick = e => { const b = e.target.closest("[data-c]"); if (!b) return; e.stopPropagation(); haptic(); onPick(b.dataset.c); bg.querySelector("#hwX").click(); };
+    bg.querySelector("#hwOk").onclick = e => { e.stopPropagation(); bg.remove(); };
+    bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); });
+  }
+  function askSheet(prefill = "", ctx = "") { markSeen("ask");
     const bg = document.createElement("div"); bg.className = "backdrop";
     bg.innerHTML = `<div class="sheet"><div class="grab"></div><div class="sheet-dog">${chinaSVG("think")}</div>
       <h2 style="font-size:22px">Спросить учителя</h2><p class="muted small" style="margin-top:4px">Любой вопрос о китайском: правило, слово, задание, иероглиф, подготовка к экзамену. Учитель ответит в чате по-русски, с примерами.</p>
       <textarea class="wr" id="aq" rows="5" placeholder="Например: чем отличаются 了 и 过?">${esc(prefill)}</textarea>
+      ${ctx ? `<div class="ask-ctx">${"Учитель увидит, о чём вопрос:"}<br><span>${esc(ctx.length > 160 ? ctx.slice(0, 160) + "…" : ctx)}</span></div>` : ""}
       <button class="primary" id="go" style="margin-top:12px">Спросить</button></div>`;
     bg.querySelector("#go").onclick = e => { e.stopPropagation(); const q = bg.querySelector("#aq").value.trim(); if (q.length < 3) return toast("Напиши вопрос");
-      bg.remove(); sendStay({ t: "ask", q: q.slice(0, 900) }, L("Вопрос у учителя — ответ придёт в чат. Продолжай, всё на месте 👌", "Your question went to the teacher; the answer will come in the chat. Carry on, nothing is lost 👌")); };
+      bg.remove(); sendStay({ t: "ask", q: q.slice(0, 900), ctx: (ctx || "").slice(0, 1500) }, L("Вопрос у учителя — ответ придёт в чат. Продолжай, всё на месте 👌", "Your question went to the teacher; the answer will come in the chat. Carry on, nothing is lost 👌")); };
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
   }
 
