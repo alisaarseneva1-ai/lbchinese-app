@@ -30,7 +30,7 @@
     <p>Официально уровни 7, 8 и 9 — это один общий блок «七—九级»: словарь (5 600 слов), иероглифы, грамматика, темы и задачи у них общие, отдельных списков для HSK 7, 8 и 9 не существует (新版HSK考试大纲, 2025).${short ? "" : ` Экзамен тоже один: HSK 7–9, 98 заданий, около 210 минут, только на компьютере. По его баллам присваивают «ниже 7», 7, 8 или 9 уровень; пороговые баллы официально не опубликованы (chinesetest.cn).`}</p>
     ${short ? "" : `<p>Отдельно для каждого уровня есть только короткое описание умений: 7 — общаться нормативно и свободно на работе и в учёбе; 8 — уместно и глубоко; 9 — точно и глубоко в любых профессиональных и академических ситуациях.</p>`}
     <p>Деление нашего курса на HSK 7, 8 и 9 — учебное (lbchinese): официальные слова и грамматику 7–9 мы распределили по трём этапам — от более частых слов и книжной грамматики (7) через риторику и официальный стиль (8) к чэнъюям, поговоркам и стилистике (9).</p>
-    <p class="src">Источники: ${SRC79.map(([t, u]) => `<a href="${u}" data-ext="${u}">${t}</a>`).join(" · ")}</p></div>`;
+    <p class="src">Источники: ${SRC79.map(([t, u]) => `<a href="${u}" data-ext="${u}">${t}</a>`).join(" ·")}</p></div>`;
   // ссылки в Telegram открываем через openLink, иначе мини-приложение закроется
   const bindLinks = root => (root || document).querySelectorAll("a[data-ext]").forEach(a => a.onclick = e => {
     e.preventDefault(); e.stopPropagation(); const u = a.dataset.ext;
@@ -135,7 +135,7 @@
       setTimeout(() => s.classList.remove("pet"), 1300);
     }
     // Чина «в движении»: act — jump (радость), tilt (думает/сочувствует), pop (вау), rise (появление снизу)
-    const act = (mood, anim) => svg(mood, "china" + (anim ? " " + anim.split(" ").map(a => "ch-" + a).join(" ") : ""));
+    const act = (mood, anim) => svg(mood, "china" + (anim ? " " + anim.split("").map(a => "ch-" + a).join("") : ""));
     return { svg, render, pet, act };
   })();
   const chinaSVG = China.svg;
@@ -564,7 +564,7 @@
     (Array.isArray(extra) ? extra : []).forEach(x => {
       if (!Array.isArray(x) || !x[0]) return;
       const e = x.length > 3 ? [x[0], x[1] || "", x[2] || "", x[3] || ""]
-        : String(x[0]).includes(" ") ? [String(x[0]).replace(/ /g, ""), x[1] || "", x[2] || "", x[0]] : [x[0], x[1] || "", x[2] || "", ""];
+        : String(x[0]).includes("") ? [String(x[0]).replace(/ /g, ""), x[1] || "", x[2] || "", x[0]] : [x[0], x[1] || "", x[2] || "", ""];
       if (e[0] !== first) out.push(e);
     });
     return out;
@@ -624,7 +624,7 @@
     if (used) used.add(nkey(e[0]));
     return e;
   }
-  const tokensOf = e => { const t = String(e[3] || "").split(" ").filter(Boolean); return t.length && nkey(t.join("")) === nkey(e[0]) ? t.filter(x => !PUNCT.has(x) && nkey(x)) : []; };
+  const tokensOf = e => { const t = String(e[3] || "").split("").filter(Boolean); return t.length && nkey(t.join("")) === nkey(e[0]) ? t.filter(x => !PUNCT.has(x) && nkey(x)) : []; };
   const EX = {
     meaning: w => ({ kind: "meaning", eyebrow: "Что значит", zh: w.h, py: w.p, ...opts(w.m, same(w).map(x => x.m)), w }),
     reverse: w => ({ kind: "reverse", eyebrow: "Как сказать по-китайски", ru: w.m, zhOpts: 1, ...opts(w.h, same(w).filter(x => x.h.length === w.h.length).map(x => x.h).concat(same(w).map(x => x.h))), w }),
@@ -804,7 +804,7 @@
     const lines = (x.audio || []).concat(x.q_audio ? [["", x.q_audio]] : []);
     const script = lines.map(([w, t]) => (w ? w + "：" : "") + t).join("\n");
     return { kind: "exam", exam: 1, sec: x.sec, eyebrow: `${x.sec === "listening" ? "Аудирование" : "Чтение"} ${examName(x.lv)} · ${x.part}`, ru: x.pru,
-      passage: x.passage, zh: [x.text, x.q].filter(Boolean).join("\n"), py: x.passage ? "" : [x.text_py, x.q_py].filter(Boolean).join(" "),
+      passage: x.passage, zh: [x.text, x.q].filter(Boolean).join("\n"), py: x.passage ? "" : [x.text_py, x.q_py].filter(Boolean).join(""),
       opts: x.options.slice(), optPy: x.opy, correct: x.answer, zhOpts: x.options.some(o => HAN.test(o)) ? 1 : 0,
       audio: x.sec === "listening" ? x.audio : null, aid: x.aid, q_audio: x.q_audio, qid: x.qid, script,
       explain: (script ? script + (x.explain ? "\n\n" : "") : "") + x.explain };
@@ -977,8 +977,8 @@
         const leEl = document.getElementById("lgE");
         if (leEl) leEl.insertAdjacentHTML("afterend", goalHtml() + tryHtml());
         const gs = document.getElementById("goalShare");
-        if (gs) gs.onclick = () => shareText(L(`Учу китайский с Чиной 🐶 Цель — ${hsk(S.l)} за ${LEVEL_WEEKS(S.l)} ${plural(LEVEL_WEEKS(S.l), "неделю", "недели", "недель")}: уже ${known(S.l)} из ${size(S.l)} слов и ${S.s || 0} ${plural(S.s || 0, "день", "дня", "дней")} подряд. Присоединяйся!`,
-          `I'm learning Chinese with Chína 🐶 Goal: ${hsk(S.l)} in ${LEVEL_WEEKS(S.l)} weeks. ${known(S.l)} of ${size(S.l)} words so far and a ${S.s || 0}-day streak. Join me!`));
+        if (gs) gs.onclick = () => shareText(L(`Учу китайский с Чиной Цель — ${hsk(S.l)} за ${LEVEL_WEEKS(S.l)} ${plural(LEVEL_WEEKS(S.l), "неделю", "недели", "недель")}: уже ${known(S.l)} из ${size(S.l)} слов и ${S.s || 0} ${plural(S.s || 0, "день", "дня", "дней")} подряд. Присоединяйся!`,
+          `I'm learning Chinese with Chína Goal: ${hsk(S.l)} in ${LEVEL_WEEKS(S.l)} weeks. ${known(S.l)} of ${size(S.l)} words so far and a ${S.s || 0}-day streak. Join me!`));
         const tb = document.getElementById("tryB");
         if (tb) tb.onclick = () => { haptic(); const t = TRY.find(x => x[0] === tb.dataset.k); markSeen(tb.dataset.k); if (t) t[4](); };
       }
@@ -1074,7 +1074,7 @@
       if (ls) ls.insertAdjacentHTML("beforeend", `<button class="item" id="pwChat">${icon("ask")}<div class="grow"><div class="t">Чат с Чиной</div><div class="s">Уроки, учитель и разговор — как в боте</div></div>${icon("chev", "i chev")}</button>
         <button class="item" id="pwOut">${icon("user")}<div class="grow"><div class="t">Выйти</div><div class="s">Прогресс сохранится — войдёшь снова по почте или через Telegram</div></div>${icon("chev", "i chev")}</button>`);
       const c = document.getElementById("pwChat"); if (c) c.onclick = () => go(chatScreen);
-      if (pushOk()) { document.getElementById("pwOut").insertAdjacentHTML("beforebegin", `<button class="item" id="pwPush"><span class="i pw-bell-i">🔔</span><div class="grow"><div class="t">Уведомления на телефон</div><div class="s" id="pwPushS">…</div></div>${icon("chev", "i chev")}</button>`);
+      if (pushOk()) { document.getElementById("pwOut").insertAdjacentHTML("beforebegin", `<button class="item" id="pwPush"><span class="i pw-bell-i"></span><div class="grow"><div class="t">Уведомления на телефон</div><div class="s" id="pwPushS">…</div></div>${icon("chev", "i chev")}</button>`);
         const ps = document.getElementById("pwPushS"), pb = document.getElementById("pwPush");
         const show = async () => { const on = Notification.permission === "granted" && !!(await pushSub()); ps.textContent = on ? "Включены — нажми, чтобы выключить" : "Выключены — нажми, чтобы включить"; return on; };
         show(); pb.onclick = async () => { haptic(); (await show()) ? await pushDisable() : await pushEnable(); show(); }; }
@@ -1153,7 +1153,7 @@
     const buyYb = document.getElementById("buyY");
     if (PR.q && buyYb) { buyYb.insertAdjacentHTML("afterend", `<button class="plan" id="buyQ"><span class="tag tag-q">${L(`Выгоднее на ${PR.sq}%`, `Save ${PR.sq}%`)}</span><b>${L("3 месяца", "3 months")}</b><span class="price">${st(PR.q)}</span><small>≈${rub(PR.rq)} · ≈${rub(Math.round(PR.rq / 3))}${L("/мес · ровно на уровень HSK", "/mo · just right for one HSK level")}</small></button>`); on("buyQ", () => buyStars("q")); }
     const ft = $app.querySelector(".foot");
-    if (ft) { ft.insertAdjacentHTML("beforebegin", `<p class="small muted center" style="margin:14px 0 0">${L("Оплачивая подписку, ты принимаешь ", "By paying, you accept the ")}<a href="#" data-doc="terms">${L("условия оферты", "Terms of Service")}</a>${L(". Месячная подписка Stars продлевается автоматически, отключить — /pay.", ". The monthly Stars subscription renews automatically; turn it off with /pay.")}</p>`);
+    if (ft) { ft.insertAdjacentHTML("beforebegin", `<p class="small muted center" style="margin:14px 0 0">${L("Оплачивая подписку, ты принимаешь ", "By paying, you accept the")}<a href="#" data-doc="terms">${L("условия оферты", "Terms of Service")}</a>${L(". Месячная подписка Stars продлевается автоматически, отключить — /pay.", ". The monthly Stars subscription renews automatically; turn it off with /pay.")}</p>`);
       $app.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); openDoc(x.dataset.doc); }); }
     if (PWA) pwaPremium();
   }
@@ -1381,7 +1381,7 @@
             ${kbdBlock("Набери предложение целиком")}${kbdToggle}
             <button class="skip" id="skip">Не знаю</button><div id="fb"></div>`;
           const line = document.getElementById("line"), check = document.getElementById("check");
-          const upd = () => { line.textContent = chosen.map(k => q.tokens[k]).join(" ") || "…"; check.disabled = chosen.length !== q.tokens.length;
+          const upd = () => { line.textContent = chosen.map(k => q.tokens[k]).join("") || "…"; check.disabled = chosen.length !== q.tokens.length;
             $app.querySelectorAll(".chip").forEach(c => c.classList.toggle("used", chosen.includes(+c.dataset.k))); };
           $app.querySelectorAll(".chip").forEach(c => c.onclick = () => { const k = +c.dataset.k; if (!chosen.includes(k)) { chosen.push(k); haptic(); upd(); } });
           document.getElementById("reset").onclick = () => { chosen.length = 0; upd(); };
@@ -1417,7 +1417,7 @@
             const marks = Object.assign({}, given.map(x => x || "—")); marks.ok = okEach;
             fill.length = 0; ctext.innerHTML = textHtml(marks);
             const n = okEach.filter(Boolean).length;
-            done(n === q.answer.length, `<span class="zh">${q.answer.map((a, k) => `（${k + 1}）${esc(a)}`).join(" ")}</span>${n ? ` <span class="muted">· верно ${n} из ${q.answer.length}</span>` : ""}`);
+            done(n === q.answer.length, `<span class="zh">${q.answer.map((a, k) => `（${k + 1}）${esc(a)}`).join("")}</span>${n ? ` <span class="muted">· верно ${n} из ${q.answer.length}</span>` : ""}`);
           };
           check.onclick = () => finishCloze(fill.map(k => q.bank[k]));
           bindKbd(v => {
@@ -1484,7 +1484,7 @@
     $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
       <h2 style="font-size:24px;margin-bottom:12px">Словарь</h2>
       <button class="wide w-scan" id="scanD" style="margin:0 0 12px"><span class="round r3d">${i3("scan", "i3r")}</span><span class="grow"><span class="t">Сканер текста${lockMark("scan")}</span><br><span class="s">Сфотографируй текст — переведу и разберу</span></span>${icon("chev", "i chev")}</button>
-      <label class="search">${icon("search")}<input id="q" placeholder="Иероглиф, пиньинь или перевод" value="${esc(dictQuery)}" autocomplete="off"><button type="button" class="hw-btn" id="hwBtn" aria-label="Написать иероглиф пальцем">✍︎<span>Написать</span></button></label>
+      <label class="search">${icon("search")}<input id="q" placeholder="Иероглиф, пиньинь или перевод" value="${esc(dictQuery)}" autocomplete="off"><button type="button" class="hw-btn" id="hwBtn" aria-label="Написать иероглиф пальцем"><span>Написать</span></button></label>
       <div class="tabs">${[0, ...LEVELS].map(l => `<button class="tab ${dictLevel === l ? "on" : ""}" data-l="${l}">${l ? hsk(l) : "Все"}</button>`).join("")}</div>
       ${dictLevel >= 7 ? note79(true) : ""}
       <div id="list"></div>`;
@@ -1594,7 +1594,7 @@
     if (!d) { sheet.innerHTML = `<div class="grab"></div><div class="big zh center">${esc(h)}</div><p class="center muted">${L("Не получилось загрузить — попробуй ещё раз", "Couldn't load it, please try again")}</p>`; return; }
     const local = word(h);
     const first = (d.e[0] || {});
-    const shortM = (local && local.m) || (first.html || "").replace(/<span class="ex">[\s\S]*?<\/span>/g, " ").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+    const shortM = (local && local.m) || (first.html || "").replace(/<span class="ex">[\s\S]*?<\/span>/g, "").replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, "").replace(/\s+/g, "").trim().slice(0, 80);
     sheet.innerHTML = `<div class="grab"></div><div class="big zh center" style="font-size:${h.length > 4 ? 40 : 64}px">${esc(h)}</div>
       ${d.e.map(e => `<div class="bk-ent">${e.py ? pyH(e.py, "py", true) : ""}<div class="bk-html">${e.html}</div></div>`).join("")}
       <div class="row" style="gap:8px;margin-top:12px"><button class="sound" id="say" style="flex:1">${icon("sound")}${L("Послушать", "Listen")}</button><button class="primary" id="learnB" style="flex:1.4;margin:0">${L("Учить: в повторение", "Learn: add to review")}</button></div>
@@ -1811,9 +1811,9 @@
     bg.innerHTML = `<div class="sheet legal-sheet"><div class="sheet-dog">${chinaSVG("joy")}</div>
       <h2 style="font-size:22px">${L("Пара формальностей", "A couple of formalities")}</h2>
       <p class="muted small" style="margin:4px 0 12px">${L("Чтобы Чина сохраняла твой прогресс и проверяла ответы, нам нужно твоё согласие. Это займёт секунду.", "So Chína can save your progress and check your answers, we need your consent. It takes a second.")}</p>
-      <label class="chk"><input type="checkbox" id="lgT"><span>${L("Принимаю ", "I accept the ")}${link("terms", L("Пользовательское соглашение", "Terms of Service"))}${L(" и ознакомлен(а) с ", " and have read the ")}${link("privacy", L("Политикой конфиденциальности", "Privacy Policy"))}</span></label>
-      <label class="chk"><input type="checkbox" id="lgC"><span>${L("Даю ", "I give my ")}${link("consent", L("согласие на обработку персональных данных", "consent to the processing of my personal data"))}</span></label>
-      <label class="chk opt"><input type="checkbox" id="lgA"><span>${L("Хочу получать новости, скидки и анонсы клубов в Telegram (", "I'd like news, discounts and club announcements in Telegram (")}${link("ads", L("согласие на рассылки", "promotions consent"))}${L("). Необязательно", "). Optional")}</span></label>
+      <label class="chk"><input type="checkbox" id="lgT"><span>${L("Принимаю ", "I accept the")}${link("terms", L("Пользовательское соглашение", "Terms of Service"))}${L(" и ознакомлен(а) с ", " and have read the")}${link("privacy", L("Политикой конфиденциальности", "Privacy Policy"))}</span></label>
+      <label class="chk"><input type="checkbox" id="lgC"><span>${L("Даю ", "I give my")}${link("consent", L("согласие на обработку персональных данных", "consent to the processing of my personal data"))}</span></label>
+      <label class="chk opt"><input type="checkbox" id="lgA"><span>${L("Хочу получать новости, скидки и анонсы клубов в Telegram (", "I'd like news, discounts and club announcements in Telegram (")}${link("ads", L("согласие на рассылки", "promotions consent"))}${L("). Необязательно","). Optional")}</span></label>
       <button class="primary" id="lgGo" disabled style="margin-top:14px">${L("Продолжить", "Continue")}</button>
       <p class="small muted center" style="margin-top:8px">${L("Мне есть 14 лет, или согласие даёт мой родитель", "I'm 14 or older, or my parent gives consent for me")}</p></div>`;
     document.body.appendChild(bg);
@@ -1901,7 +1901,7 @@
   }
   function lgRows(rows, ranked = true) {
     if (!rows.length) return "";
-    return rows.map(([n, lv, x, mine], i) => `<div class="lg-row${mine ? " me" : ""}"><span class="lg-pl">${ranked ? (i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1) : ""}</span>
+    return rows.map(([n, lv, x, mine], i) => `<div class="lg-row${mine ? " me" : ""}"><span class="lg-pl">${ranked ? (i + 1) : ""}</span>
       <span class="lg-n">${esc(n)}${mine ? ` <small>${L("ты", "you")}</small>` : ""}<small class="lg-lv">HSK ${lv}</small></span><b class="lg-x">${x}</b></div>`).join("");
   }
   function drawLeague() {
@@ -1910,7 +1910,7 @@
     // сколько до следующего места
     let gap = "";
     if (me.pl && me.pl > 1 && D.top && D.top[me.pl - 2]) gap = L(`До ${me.pl - 1} места — ${D.top[me.pl - 2][2] - me.xp + 1} очков`, `${D.top[me.pl - 2][2] - me.xp + 1} pts to place ${me.pl - 1}`);
-    else if (me.pl === 1) gap = L("Ты лидер недели! Держись 💪", "You're leading the week! Hold on 💪");
+    else if (me.pl === 1) gap = L("Ты лидер недели! Держись", "You're leading the week! Hold on");
     else gap = L("Один урок — и ты в рейтинге", "One lesson and you're on the board");
     const tabs = [["all", L("Все", "Everyone")], ["fr", L("Друзья", "Friends")], ["clan", L("Стаи", "Packs")]];
     let body = "";
@@ -1926,20 +1926,20 @@
     } else {
       const c = D.clan;
       if (c) {
-        body = `<div class="pcard lg-clan"><div class="row"><span class="lg-wolf">🐺</span><div class="grow"><div class="label" style="margin:0">${L("Моя стая", "My pack")}</div><div class="title-big" style="margin:2px 0 0;font-size:24px">${esc(c.name)}</div>
+        body = `<div class="pcard lg-clan"><div class="row"><div class="grow"><div class="label" style="margin:0">${L("Моя стая", "My pack")}</div><div class="title-big" style="margin:2px 0 0;font-size:24px">${esc(c.name)}</div>
           <div class="small muted">${c.m.length}/${c.max} · ${c.xp} ${L("очков", "pts")}${c.pl ? " · " + L(`${c.pl} место`, `place ${c.pl}`) : ""}</div></div></div>
           <div class="lg-list" style="margin-top:10px">${lgRows(c.m)}</div>
           <button class="primary" id="lgClanInv" style="margin-top:12px">${L("Позвать в стаю", "Invite to the pack")}</button>
           <button class="skip" id="lgLeave" style="margin-top:6px">${L("Выйти из стаи", "Leave the pack")}</button></div>`;
       } else {
-        body = `<div class="pcard"><div style="font-size:16px"><b>${L("Собери свою стаю", "Build your pack")}</b> 🐺</div>
+        body = `<div class="pcard"><div style="font-size:16px"><b>${L("Собери свою стаю", "Build your pack")}</b> </div>
           <p class="small muted" style="margin:6px 0 10px">${L(`Стая — это команда до 30 человек. Очки всех участников складываются, стаи соревнуются каждую неделю. Победившая стая получает заморозки серии.`, `A pack is a team of up to 30 people. Everyone's points add up, and packs compete every week. The winning pack gets streak freezes.`)}</p>
           <input class="wr" id="lgCN" maxlength="28" placeholder="${L("Название стаи, например «Панды 熊猫»", "Pack name, e.g. Pandas 熊猫")}" style="width:100%">
           <button class="primary" id="lgCreate" style="margin-top:10px">${L("Создать стаю", "Create a pack")}</button>
           <p class="small muted" style="margin:10px 0 0">${L("Чтобы вступить в чужую стаю — открой ссылку, которую прислал друг.", "To join a friend's pack, open the link they sent you.")}</p></div>`;
       }
       body += `<div class="label" style="margin-top:16px">${L("Рейтинг стай", "Pack league")}</div>` + (D.clans.length
-        ? `<div class="pcard lg-list">${D.clans.map(([n, x, k, mine], i) => `<div class="lg-row${mine ? " me" : ""}"><span class="lg-pl">${i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</span><span class="lg-n">${esc(n)}<small class="lg-lv">${k} ${L("чел.", "ppl")}</small></span><b class="lg-x">${x}</b></div>`).join("")}</div>`
+        ? `<div class="pcard lg-list">${D.clans.map(([n, x, k, mine], i) => `<div class="lg-row${mine ? " me" : ""}"><span class="lg-pl">${i < 3 ? ["", "", ""][i] : i + 1}</span><span class="lg-n">${esc(n)}<small class="lg-lv">${k} ${L("чел.", "ppl")}</small></span><b class="lg-x">${x}</b></div>`).join("")}</div>`
         : `<p class="muted center" style="padding:16px">${L("Стай пока нет — создай первую!", "No packs yet. Create the first one!")}</p>`);
     }
     $app.innerHTML = `${back}
@@ -1947,18 +1947,18 @@
         <h2 class="title-big" style="margin:4px 0 0">${lgName()}</h2></div>
       <div class="lg-me"><div class="lg-me-pl">${me.pl ? `<b>${me.pl}</b><small>${L("место", "place")}</small>` : "<b>—</b>"}</div>
         <div class="grow"><div class="lg-me-x"><b>${me.xp || 0}</b> ${L("очков за неделю", "pts this week")}</div><div class="small">${gap}</div></div>${i3("crown", "lg-3d")}</div>
-      ${D.prize ? `<div class="small muted" style="margin:8px 4px 0">${L(`🎁 Топ-3 недели получают заморозки серии, 1-е место — ещё ${D.prize} ${plural(D.prize, "день", "дня", "дней")} Премиума`, `🎁 The week's top 3 get streak freezes; 1st place also gets ${D.prize} days of Premium`)}</div>` : ""}
+      ${D.prize ? `<div class="small muted" style="margin:8px 4px 0">${L(`Топ-3 недели получают заморозки серии, 1-е место — ещё ${D.prize} ${plural(D.prize, "день", "дня", "дней")} Премиума`, `The week's top 3 get streak freezes; 1st place also gets ${D.prize} days of Premium`)}</div>` : ""}
       <div class="tabs" style="margin-top:8px">${tabs.map(([k, t]) => `<button class="tab ${lgTab === k ? "on" : ""}" data-lt="${k}">${t}</button>`).join("")}</div>
       ${body}${D.demo ? `<div class="foot">${L("Демо: открой приложение из бота", "Demo: open the app from the bot")}</div>` : ""}`;
     const bk = document.getElementById("bk"); if (bk) bk.onclick = goBack;
     document.querySelectorAll("[data-lt]").forEach(b => b.onclick = () => { haptic(); lgTab = b.dataset.lt; drawLeague(); });
     const meCard = $app.querySelector(".lg-me");
     if (meCard && me.pl) { meCard.insertAdjacentHTML("afterend", `<button class="secondary" id="lgShare" style="margin-top:10px">${L("Поделиться местом в рейтинге", "Share my place")}</button>`);
-      document.getElementById("lgShare").onclick = () => shareText(L(`Я на ${me.pl} месте в рейтинге недели по китайскому с Чиной — ${me.xp} очков! 🏆 Сможешь обогнать?`, `I'm #${me.pl} in this week's Chinese league with Chína: ${me.xp} points! 🏆 Can you beat me?`)); }
+      document.getElementById("lgShare").onclick = () => shareText(L(`Я на ${me.pl} месте в рейтинге недели по китайскому с Чиной — ${me.xp} очков! Сможешь обогнать?`, `I'm #${me.pl} in this week's Chinese league with Chína: ${me.xp} points! Can you beat me?`)); }
     const inv = document.getElementById("lgInv");
-    if (inv) inv.onclick = () => shareText(L("Давай соревноваться в китайском! Кто наберёт больше очков за неделю с Чиной? 🏆 汪！", "Let's compete in Chinese! Who scores more points with Chína this week? 🏆 汪！"));
+    if (inv) inv.onclick = () => shareText(L("Давай соревноваться в китайском! Кто наберёт больше очков за неделю с Чиной? 汪！", "Let's compete in Chinese! Who scores more points with Chína this week? 汪！"));
     const ci = document.getElementById("lgClanInv");
-    if (ci) ci.onclick = () => { haptic(); openTg("https://t.me/share/url?url=" + encodeURIComponent(D.clan.link) + "&text=" + encodeURIComponent(L(`Вступай в мою стаю «${D.clan.name}» — учим китайский с Чиной и соревнуемся с другими стаями! 🐺`, `Join my pack "${D.clan.name}": we learn Chinese with Chína and compete with other packs! 🐺`))); };
+    if (ci) ci.onclick = () => { haptic(); openTg("https://t.me/share/url?url=" + encodeURIComponent(D.clan.link) + "&text=" + encodeURIComponent(L(`Вступай в мою стаю «${D.clan.name}» — учим китайский с Чиной и соревнуемся с другими стаями! `, `Join my pack "${D.clan.name}": we learn Chinese with Chína and compete with other packs!`))); };
     const post = async (body, okMsg) => {
       try { const r = await apiPost("clan", Object.assign(apiAuth(), body), 8000);
         if (r.status === 200 && r.data) { LG = r.data; if (okMsg) toast(okMsg); haptic("success"); drawLeague(); return; }
@@ -1966,7 +1966,7 @@
       } catch (e) { toast(L("Нет связи — попробуй ещё раз", "No connection, please try again")); }
     };
     const cr = document.getElementById("lgCreate");
-    if (cr) cr.onclick = () => { const n = (document.getElementById("lgCN").value || "").trim(); if (n.length < 2) { toast(L("Придумай название стаи", "Pick a name for your pack")); return; } if (D.demo) { toast(L("Открой приложение из бота", "Open the app from the bot")); return; } post({ op: "create", name: n }, L("Стая создана! Зови друзей 🐺", "Pack created! Invite your friends 🐺")); };
+    if (cr) cr.onclick = () => { const n = (document.getElementById("lgCN").value || "").trim(); if (n.length < 2) { toast(L("Придумай название стаи", "Pick a name for your pack")); return; } if (D.demo) { toast(L("Открой приложение из бота", "Open the app from the bot")); return; } post({ op: "create", name: n }, L("Стая создана! Зови друзей ", "Pack created! Invite your friends")); };
     const lv = document.getElementById("lgLeave");
     if (lv) lv.onclick = () => { ask(L("Выйти из стаи?", "Leave the pack?"), () => post({ op: "leave" }, L("Ты вышел(ла) из стаи", "You left the pack"))); };
     const hd = document.getElementById("lgHide");
@@ -2319,7 +2319,7 @@
         res[s.id] = [c, t]; });
       const objC = Object.values(res).reduce((n, r) => n + r[0], 0), objT = Object.values(res).reduce((n, r) => n + r[1], 0);
       const pct = objT ? Math.round(objC / objT * 100) : 0;
-      if (record) { const hist = store.get("ex_hist", {}); (hist[ex.level] = hist[ex.level] || []).unshift({ d: new Date().toLocaleDateString("ru-RU"), v: exVar(ex), what: full ? "полный экзамен" : secs.map(s => SEC_RU[s.id]).join(", "), pct });
+      if (record) { const hist = store.get("ex_hist", {}); (hist[ex.level] = hist[ex.level] || []).unshift({ d: new Date().toLocaleDateString("ru-RU"), v: exVar(ex), what: full ? "полный экзамен" : secs.map(s => SEC_RU[s.id]).join(","), pct });
       hist[ex.level] = hist[ex.level].slice(0, 20); store.set("ex_hist", hist); }
       return { res, wrong, subj, pct };
     }
@@ -2475,7 +2475,7 @@
       bg.querySelector("#hwX").onclick = e => { e.stopPropagation(); pad.clear(); };
     };
     if (window.Handwrite) start();
-    else { hwScript = hwScript || new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "handwrite.js?v=2"; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+    else { hwScript = hwScript || new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "handwrite.js?v=3"; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
       hwScript.then(start).catch(() => { cands.innerHTML = `<span class="muted small">Не загрузилось — проверь интернет</span>`; }); }
     cands.onclick = e => { const b = e.target.closest("[data-c]"); if (!b) return; e.stopPropagation(); haptic(); onPick(b.dataset.c); bg.querySelector("#hwX").click(); };
     bg.querySelector("#hwOk").onclick = e => { e.stopPropagation(); bg.remove(); };
@@ -2489,7 +2489,7 @@
       ${ctx ? `<div class="ask-ctx">${"Учитель увидит, о чём вопрос:"}<br><span>${esc(ctx.length > 160 ? ctx.slice(0, 160) + "…" : ctx)}</span></div>` : ""}
       <button class="primary" id="go" style="margin-top:12px">Спросить</button></div>`;
     bg.querySelector("#go").onclick = e => { e.stopPropagation(); const q = bg.querySelector("#aq").value.trim(); if (q.length < 3) return toast("Напиши вопрос");
-      bg.remove(); sendStay({ t: "ask", q: q.slice(0, 900), ctx: (ctx || "").slice(0, 1500) }, L("Вопрос у учителя — ответ придёт в чат. Продолжай, всё на месте 👌", "Your question went to the teacher; the answer will come in the chat. Carry on, nothing is lost 👌")); };
+      bg.remove(); sendStay({ t: "ask", q: q.slice(0, 900), ctx: (ctx || "").slice(0, 1500) }, L("Вопрос у учителя — ответ придёт в чат. Продолжай, всё на месте ", "Your question went to the teacher; the answer will come in the chat. Carry on, nothing is lost")); };
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
   }
 
@@ -2505,7 +2505,7 @@
       <div class="eyebrow">Устный экзамен</div><h2 style="font-size:26px;margin-top:2px">口语 <span class="serif muted" style="font-weight:500">HSK 3.0 и HSKK</span></h2>
       <div class="tabs">${levels.map((l, k) => `<button class="tab ${kkLevel === k ? "on" : ""}" data-l="${k}">${esc(l.name.replace("HSKK ", "").replace(" 口语", ""))}</button>`).join("")}</div>
       <div class="today-card"><div class="today-top"><div class="glyph zh"><span>说</span></div><div class="grow">
-        <div class="eyebrow">${esc(L.name)} · ${esc(L.ru || "")}</div><div class="today-title">${L.sets[0].parts.map(p => `${esc(p.title)} ×${p.items.length}`).join(", ")}</div>
+        <div class="eyebrow">${esc(L.name)} · ${esc(L.ru || "")}</div><div class="today-title">${L.sets[0].parts.map(p => `${esc(p.title)} ×${p.items.length}`).join(",")}</div>
         <div class="today-meta">${L.total_minutes ? `${L.total_minutes} мин, из них ${L.prep_minutes} мин на подготовку` : ""}${L.id === "hsk79" ? "<br>Устная часть экзамена HSK 7–9 (только на компьютере). Пороги уровней официально не опубликованы"
           : /^k\d$/.test(L.id) ? `<br>Устная часть HSK 3.0: на HSK ${L.id.slice(1)} её сдают вместе с письменной. Шкала баллов официально пока не опубликована`
           : "<br>Классический HSKK: 100 баллов, сдан от 60"}</div></div></div></div>
@@ -2573,7 +2573,7 @@
       <button class="wide" id="askT" style="margin-top:14px"><span class="round">${icon("ask")}</span><span class="grow"><span class="t">Нужна другая ситуация?</span><br><span class="s">Спроси учителя — подскажет фразы</span></span>${icon("chev", "i chev")}</button>`;
     navBar("life");
     $app.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { haptic(); go(() => lifeTrack(b.dataset.t)); });
-    document.getElementById("askT").onclick = () => S.ok ? askSheet("Как сказать по-китайски в ситуации: ") : toast("Нужна подписка");
+    document.getElementById("askT").onclick = () => S.ok ? askSheet("Как сказать по-китайски в ситуации:") : toast("Нужна подписка");
   }
   function lifeTrack(tid) {
     const t = LIFE.tracks.find(x => x.id === tid); if (!t) return go(lifeTab, false);
@@ -2767,7 +2767,7 @@
       const st = r.data && r.data.status;
       if (r.status === 404 || st === "canceled") { store.set("paying", ""); if (st === "canceled") setTimeout(() => toast("Оплата не прошла — можно попробовать ещё раз"), 1200); return; }
       if (st === "succeeded") { store.set("paying", ""); if (r.data.state) { S = Object.assign(r.data.state, { srv: 1, tk: r.data.state.tk || S.tk }); PR = S.pr && S.pr.on ? S.pr : null; }
-        setTimeout(() => toast("Оплата прошла — Премиум открыт 🎉"), 1200); return; }
+        setTimeout(() => toast("Оплата прошла — Премиум открыт"), 1200); return; }
       await new Promise(res => setTimeout(res, 2500));
     }
     setTimeout(() => toast("Платёж ещё проверяется — Премиум включится сам в течение пары минут"), 1200);
@@ -2819,7 +2819,7 @@
       let sub = await reg.pushManager.getSubscription();
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(key) });
       const r = await apiPost("push", { k: S.tk, op: "on", sub: sub.toJSON() }, 8000);
-      if (r.status === 200) { store.set("push", 1); if (!quiet) toast("Готово — Чина будет присылать уведомления 🔔"); return true; }
+      if (r.status === 200) { store.set("push", 1); if (!quiet) toast("Готово — Чина будет присылать уведомления"); return true; }
     } catch (e) {}
     if (!quiet) toast("Не получилось включить уведомления — попробуй ещё раз");
     return false;
@@ -2833,7 +2833,7 @@
   function pushCard() {
     if (!PWA || !pushOk() || Notification.permission === "granted" || Notification.permission === "denied" || store.get("push_no", 0) > Date.now()) return;
     const c = document.createElement("div"); c.className = "pw-inst pw-push";
-    c.innerHTML = `<span class="pw-bell">🔔</span><div class="grow"><b>Включи напоминания</b><span>Чина напомнит про урок и ответит, даже когда приложение закрыто</span></div>
+    c.innerHTML = `<span class="pw-bell"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span><div class="grow"><b>Включи напоминания</b><span>Чина напомнит про урок и ответит, даже когда приложение закрыто</span></div>
       <button class="pw-inst-go">Включить</button><button class="pw-inst-x" aria-label="Скрыть">×</button>`;
     c.querySelector(".pw-inst-x").onclick = () => { store.set("push_no", Date.now() + 5 * 864e5); c.remove(); };
     c.querySelector(".pw-inst-go").onclick = async () => { if (await pushEnable()) c.remove(); };

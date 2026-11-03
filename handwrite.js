@@ -81,33 +81,106 @@
   }
 
   // ---------- поле для письма ----------
+  // Поле для письма: чёткое на любом экране, линия как кистью — тоньше на быстрых участках, сглажена кривыми.
+  // Для распознавания сохраняются исходные точки черт.
   function pad(canvas, onChange) {
-    var ctx = canvas.getContext("2d"), strokes = [], cur = null, dpr = window.devicePixelRatio || 1;
+    var ctx = canvas.getContext("2d"), strokes = [], cur = null, dpr = 1, W = 0, H = 0, ink = null, inkCtx = null;
     function size() {
-      var r = canvas.getBoundingClientRect();
-      canvas.width = r.width * dpr; canvas.height = r.height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw();
+      var r = canvas.getBoundingClientRect(); if (!r.width) return;
+      dpr = Math.min(3, window.devicePixelRatio || 1); W = r.width; H = r.height;
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      ink = document.createElement("canvas"); ink.width = canvas.width; ink.height = canvas.height;
+      inkCtx = ink.getContext("2d"); inkCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      strokes.forEach(function (s) { paint(inkCtx, s); }); draw();
     }
-    function grid() {
-      var w = canvas.width / dpr, h = canvas.height / dpr;
-      ctx.save(); ctx.strokeStyle = "rgba(120,120,140,.22)"; ctx.setLineDash([6, 6]); ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.moveTo(0, 0); ctx.lineTo(w, h); ctx.moveTo(w, 0); ctx.lineTo(0, h); ctx.stroke(); ctx.restore();
+    function grid() {            // 米字格, как в тетради для иероглифов
+      var css = getComputedStyle(canvas), line = css.getPropertyValue("--hw-grid").trim() || "rgba(214,98,86,.42)";
+      ctx.save(); ctx.strokeStyle = line; ctx.lineWidth = 1;
+      ctx.setLineDash([]); ctx.strokeRect(.5, .5, W - 1, H - 1);
+      ctx.setLineDash([5, 5]); ctx.beginPath();
+      ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2);
+      ctx.stroke(); ctx.globalAlpha = .55; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(W, H); ctx.moveTo(W, 0); ctx.lineTo(0, H); ctx.stroke();
+      ctx.restore();
     }
+    function color() { return getComputedStyle(canvas).color || "#1B2541"; }
+    // Черта рисуется как залитый контур: сглаженная осевая линия (Чайкин), ширина плавно зависит от скорости,
+    // концы скруглены — получается ровная линия как от кисти-ручки, без «бусин» на стыках.
+    function smooth(s) {
+      var p = s.map(function (q) { return [q[0], q[1], q[2]]; });
+      for (var it = 0; it < 2 && p.length > 2; it++) {
+        var o = [p[0]];
+        for (var i = 0; i < p.length - 1; i++) {
+          var a = p[i], b = p[i + 1];
+          o.push([a[0] * .75 + b[0] * .25, a[1] * .75 + b[1] * .25, a[2] * .75 + b[2] * .25]);
+          o.push([a[0] * .25 + b[0] * .75, a[1] * .25 + b[1] * .75, a[2] * .25 + b[2] * .75]);
+        }
+        o.push(p[p.length - 1]); p = o;
+      }
+      return p;
+    }
+    function base() { return Math.max(4.5, W / 30); }
+    function widths(p) {
+      var B = base(), out = [], prev = B, n = p.length;
+      for (var i = 0; i < n; i++) {
+        var j = Math.max(0, i - 3), d = 0;
+        for (var k = j + 1; k <= i; k++) d += Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]);
+        var dt = i > j ? Math.max(4, p[i][2] - p[j][2]) : 16, v = d / dt;
+        var w = B * Math.max(.62, Math.min(1.12, 1.12 - v * .28));
+        prev = i ? prev * .85 + w * .15 : w; out.push(prev);
+      }
+      var tail = Math.min(10, Math.floor(n / 4));          // лёгкое сужение в конце черты
+      for (var t = 0; t < tail; t++) out[n - 1 - t] *= .6 + .4 * (t / tail);
+      return out;
+    }
+    function paint(c, s) {
+      c.fillStyle = color();
+      var B = base();
+      if (s.length < 2 || Math.hypot(s[s.length - 1][0] - s[0][0], s[s.length - 1][1] - s[0][1]) < 2) {
+        c.beginPath(); c.arc(s[0][0], s[0][1], B * .55, 0, 7); c.fill(); return;
+      }
+      var p = smooth(s), w = widths(p), n = p.length, L = [], R = [];
+      for (var i = 0; i < n; i++) {
+        var a = p[Math.max(0, i - 1)], b = p[Math.min(n - 1, i + 1)];
+        var dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, h = w[i] / 2;
+        L.push([p[i][0] + nx * h, p[i][1] + ny * h]); R.push([p[i][0] - nx * h, p[i][1] - ny * h]);
+      }
+      c.beginPath(); c.moveTo(L[0][0], L[0][1]);
+      for (i = 1; i < n; i++) c.lineTo(L[i][0], L[i][1]);
+      var e = p[n - 1], ang = Math.atan2(L[n - 1][1] - e[1], L[n - 1][0] - e[0]);
+      c.arc(e[0], e[1], w[n - 1] / 2, ang, ang - Math.PI, true);
+      for (i = n - 1; i >= 0; i--) c.lineTo(R[i][0], R[i][1]);
+      var st = p[0], ang0 = Math.atan2(R[0][1] - st[1], R[0][0] - st[0]);
+      c.arc(st[0], st[1], w[0] / 2, ang0, ang0 - Math.PI, true);
+      c.closePath(); c.fill();
+    }
+    var raf = 0;
     function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height); grid();
-      ctx.lineCap = ctx.lineJoin = "round"; ctx.lineWidth = Math.max(6, canvas.width / dpr / 28); ctx.strokeStyle = getComputedStyle(canvas).color || "#1B2541";
-      strokes.concat(cur ? [cur] : []).forEach(function (s) { ctx.beginPath(); s.forEach(function (p, i) { i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); if (s.length === 1) ctx.lineTo(s[0][0] + .1, s[0][1]); ctx.stroke(); });
+      raf = 0; ctx.clearRect(0, 0, W, H); grid();
+      if (ink) ctx.drawImage(ink, 0, 0, W, H);
+      if (cur) paint(ctx, cur);
     }
-    function pt(e) { var r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    function later() { if (!raf) raf = requestAnimationFrame(draw); }
+    function pt(e) { var r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height, e.timeStamp || Date.now()]; }
     canvas.style.touchAction = "none";
-    canvas.addEventListener("pointerdown", function (e) { e.preventDefault(); canvas.setPointerCapture(e.pointerId); cur = [pt(e)]; draw(); });
-    canvas.addEventListener("pointermove", function (e) { if (!cur) return; var p = pt(e), l = cur[cur.length - 1]; if (Math.hypot(p[0] - l[0], p[1] - l[1]) > 2) { cur.push(p); draw(); } });
-    function up() { if (!cur) return; strokes.push(cur); cur = null; draw(); onChange(strokes.slice()); }
+    canvas.addEventListener("pointerdown", function (e) { e.preventDefault(); if (!W) size(); try { canvas.setPointerCapture(e.pointerId); } catch (x) {} cur = [pt(e)]; later(); });
+    canvas.addEventListener("pointermove", function (e) {
+      if (!cur) return;
+      var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; if (!evs.length) evs = [e];
+      evs.forEach(function (ev) { var p = pt(ev), l = cur[cur.length - 1]; if (Math.hypot(p[0] - l[0], p[1] - l[1]) > 1.2) cur.push(p); });
+      later();
+    });
+    function up() { if (!cur) return; strokes.push(cur); if (inkCtx) paint(inkCtx, cur); cur = null; draw(); onChange(strokes.map(plain)); }
+    function plain(s) { return s.map(function (p) { return [p[0], p[1]]; }); }
+    function redrawInk() { if (!inkCtx) return; inkCtx.clearRect(0, 0, W, H); strokes.forEach(function (s) { paint(inkCtx, s); }); draw(); }
     canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
-    size(); addEventListener("resize", size);
+    size();
+    if (window.ResizeObserver) new ResizeObserver(function () { var r = canvas.getBoundingClientRect(); if (Math.abs(r.width - W) > .5 || Math.abs(r.height - H) > .5) size(); }).observe(canvas);
+    else addEventListener("resize", size);
     return {
-      clear: function () { strokes = []; cur = null; draw(); onChange([]); },
-      undo: function () { strokes.pop(); draw(); onChange(strokes.slice()); },
-      strokes: function () { return strokes.slice(); }
+      clear: function () { strokes = []; cur = null; redrawInk(); onChange([]); },
+      undo: function () { strokes.pop(); redrawInk(); onChange(strokes.map(plain)); },
+      strokes: function () { return strokes.map(plain); }
     };
   }
 
