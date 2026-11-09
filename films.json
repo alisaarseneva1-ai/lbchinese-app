@@ -1,0 +1,66 @@
+{
+"v": 1,
+"free": 120,
+"items": [
+{
+"id": "peppa-46",
+"yt": "_dJXpEoYo88",
+"zh": "小猪佩奇：去海边玩",
+"ru": "Свинка Пеппа: «На пляже»",
+"kind": "cartoon",
+"lv": "HSK 1–2",
+"sec": 285,
+"ch": "小猪佩奇 中文官方 · Peppa Pig"
+},
+{
+"id": "peppa-43",
+"yt": "8p1YqAu4MeI",
+"zh": "小猪佩奇：整理房间",
+"ru": "Свинка Пеппа: «Уборка»",
+"kind": "cartoon",
+"lv": "HSK 1–2",
+"sec": 285,
+"ch": "小猪佩奇 中文官方 · Peppa Pig"
+},
+{
+"id": "superwings-5-1",
+"yt": "ZaLXsKj7rbQ",
+"zh": "超级飞侠：巴塔哥尼亚的小马",
+"ru": "Супер Крылья: «Пони из Патагонии»",
+"kind": "cartoon",
+"lv": "HSK 2–3",
+"sec": 668,
+"ch": "超级飞侠 Super Wings"
+},
+{
+"id": "xiyangyang-1",
+"yt": "CTv5KGvYF0o",
+"zh": "喜羊羊与灰太狼：羊羊快乐的一年 1",
+"ru": "Весёлая коза и Большой Серый Волк, серия 1",
+"kind": "cartoon",
+"lv": "HSK 3",
+"sec": 800,
+"ch": "喜羊羊與灰太狼 官方中文頻道"
+},
+{
+"id": "xiongchumo-1",
+"yt": "karxk2jwL9k",
+"zh": "熊出没：新邻居",
+"ru": "Медведи-соседи: «Новый сосед»",
+"kind": "cartoon",
+"lv": "HSK 3",
+"sec": 780,
+"ch": "熊出没 Boonie Bears"
+},
+{
+"id": "jiayouernv-1",
+"yt": "PC3DmhI-3tU",
+"zh": "家有儿女 第一季 第1集",
+"ru": "Дома с детьми, 1 сезон, серия 1",
+"kind": "series",
+"lv": "HSK 3–4",
+"sec": 1513,
+"ch": "中国电视剧精选 Chinese Drama"
+}
+]
+}

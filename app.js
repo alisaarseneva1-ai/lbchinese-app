@@ -290,7 +290,7 @@
     chat: "Разговор с Чиной без лимита", voice: "Голосовые с разбором тонов", ask: "Учитель без лимита",
     essay: "Проверка сочинений без лимита", exam: "Пробные экзамены HSK 3.0", hskk: "Устный экзамен HSK 口语 и HSKK",
     role: "Ролевые игры «Для жизни»", final: "Итоговый тест уровня", hsk79: "Уровни HSK 7–9",
-    levels: "Уроки HSK 2–6", ahead: "Уроки вперёд", mistakes: "Работа над ошибками", scan: "Сканер текста: фото → перевод и грамматика" };
+    levels: "Уроки HSK 2–6", ahead: "Уроки вперёд", mistakes: "Работа над ошибками", scan: "Сканер текста: фото → перевод и грамматика", film: "Кино на китайском с переводом каждой фразы" };
   const isPrem = () => !PR || !!PR.p;
   const can = f => isPrem() || ((PR && PR.ff) || []).includes(f);
   // фото к заданиям экзамена (img/hsk/pNN.jpg рядом с приложением); без фото — старое текстовое описание
@@ -937,6 +937,7 @@
 
       <button class="wide w-jade" id="lifeW"><span class="round r3d">${i3("life", "i3r")}</span><span class="grow"><span class="t">Китайский для жизни</span><br><span class="s" style="color:rgba(255,255,255,.7)">Китай, работа, бизнес, для себя — ролевые игры</span></span>${icon("chev", "i chev")}</button>
       <button class="wide w-scan" id="scanW"><span class="round r3d">${i3("scan", "i3r")}</span><span class="grow"><span class="t">Сканер текста${lockMark("scan")}</span><br><span class="s">Фото китайского текста → перевод, слова и грамматика</span></span>${icon("chev", "i chev")}</button>
+      <button class="wide w-film" id="filmW"><span class="round r3d film-ic">${svgI('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z"/>')}</span><span class="grow"><span class="t">Кино на китайском${lockMark("film")}</span><br><span class="s">Мультфильмы и сериалы: перевод и пиньинь каждой фразы</span></span>${icon("chev", "i chev")}</button>
       ${reviewsHtml()}
       <button class="wide" id="askT"><span class="round r3d">${i3("teacher", "i3r")}</span><span class="grow"><span class="t">Спросить учителя</span><br><span class="s">Любой вопрос о китайском — ответ в чате</span></span>${icon("chev", "i chev")}</button>
       ${S.demo ? `<div class="foot">Демо-режим · открой приложение кнопкой в боте</div>` : ""}
@@ -990,6 +991,7 @@
     document.querySelectorAll("[data-club]").forEach(b => b.addEventListener("click", () => { haptic(); send({ t: "club", i: +b.dataset.club }); }));
     on("lifeW", () => go(lifeTab, false));
     on("scanW", needP("scan", () => go(scanScreen)));
+    on("filmW", () => go(filmsScreen));
     on("rvAdd", () => feedbackSheet());
     on("pay", () => send({ t: "pay" }));
     let tap = 0;
@@ -1098,8 +1100,144 @@
     on("premI", () => go(() => premiumScreen()));
   }
 
+  // =====================================================================
+  // ---------- Кино: мультфильмы и сериалы с переводом каждой фразы ----------
+  // =====================================================================
+  // films.json — каталог (видео с официальных каналов); фразы приходят с сервера (/app/film), без Премиума — только первые FREE секунд.
+  // Фраза: [начало, конец, [[слово, пиньинь], ...], перевод]
+  let FILMS = null;
+  const svgI = d => `<svg class="i" viewBox="0 0 24 24">${d}</svg>`;
+  const I_PLAY = svgI('<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>'), I_PAUSE = svgI('<path d="M8 5h3v14H8zM13 5h3v14h-3z" fill="currentColor" stroke="none"/>');
+  const I_PREV = svgI('<path d="M6 5v14M18 6l-9 6 9 6z"/>'), I_NEXT = svgI('<path d="M18 5v14M6 6l9 6-9 6z"/>');
+  const filmOpt = () => Object.assign({ py: true, ru: true, zh: true, loop: false }, store.get("film_opt", {}));
+  const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  async function loadFilms() {
+    if (FILMS) return FILMS;
+    const r = await fetch("films.json?v=" + Date.now().toString().slice(0, -5)); FILMS = await r.json(); return FILMS;
+  }
+  async function filmsScreen() { markSeen("film");
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="eyebrow">看电影 · кино</div><div class="title-big" style="margin:2px 0 6px">Кино на китайском</div>
+      <div class="sub">Мультфильмы и сериалы с официальных каналов. Под видео каждая фраза: иероглифы, пиньинь и перевод. Нажми на слово, чтобы открыть его в словаре.</div>
+      <div id="fl"><p class="center muted small" style="padding:20px">Загружаю…</p></div>`;
+    navBar("home");
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = goBack;
+    let d; try { d = await loadFilms(); } catch (e) { document.getElementById("fl").innerHTML = `<p class="center muted">Не получилось загрузить список. Проверь интернет и открой раздел ещё раз.</p>`; return; }
+    const seen = store.get("film_pos", {});
+    const card = f => `<button class="film-c" data-f="${esc(f.id)}"><span class="film-th"><img src="https://i.ytimg.com/vi/${esc(f.yt)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="film-len">${mmss(f.sec)}</span>${seen[f.id] ? `<span class="film-bar" style="width:${Math.min(100, seen[f.id] / f.sec * 100)}%"></span>` : ""}</span>
+      <span class="film-t"><b class="zh">${esc(f.zh)}</b><span>${esc(f.ru)}</span><small>${esc(f.lv)} · ${esc(f.ch)}</small></span></button>`;
+    const groups = [["cartoon", "Мультфильмы"], ["series", "Сериалы"]];
+    document.getElementById("fl").innerHTML = (can("film") ? "" : `<div class="film-note">${LOCK} Без Премиума — первые ${Math.round(d.free / 60)} минуты каждого видео. <button class="linkb" id="fprem">Открыть всё</button></div>`) +
+      groups.map(([k, t]) => { const xs = d.items.filter(f => f.kind === k); return xs.length ? `<div class="label" style="margin:18px 2px 8px">${t}</div><div class="film-grid">${xs.map(card).join("")}</div>` : ""; }).join("") +
+      `<p class="muted small" style="margin:18px 4px 0">Видео показываются с YouTube. Если не открываются — в России YouTube работает с перебоями, попробуй включить VPN.</p>`;
+    const fp = document.getElementById("fprem"); if (fp) fp.onclick = () => go(() => premiumScreen("film"));
+    document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { haptic(); const f = d.items.find(x => x.id === b.dataset.f); if (f) go(() => filmScreen(f)); });
+  }
+  let ytApi = null;
+  function loadYT() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (ytApi) return ytApi;
+    ytApi = new Promise((res, rej) => {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (prev) try { prev(); } catch (e) {} res(window.YT); };
+      const s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; s.onerror = () => { ytApi = null; rej(new Error("yt")); };
+      document.head.appendChild(s);
+      setTimeout(() => { if (!(window.YT && window.YT.Player)) { ytApi = null; rej(new Error("timeout")); } }, 15000);
+    });
+    return ytApi;
+  }
+  async function filmScreen(f) {
+    ASKOFF = true;
+    const o = filmOpt();
+    $app.innerHTML = `${tg ? "" : `<button class="backlink" id="bk">${icon("back")}Назад</button>`}
+      <div class="film-top"><div class="grow"><b class="zh">${esc(f.zh)}</b><small>${esc(f.ru)} · ${esc(f.lv)}</small></div>
+        <div class="film-tg">
+          <button class="ftg${o.zh ? " on" : ""}" data-o="zh" title="Иероглифы" aria-label="Иероглифы">汉</button>
+          <button class="ftg${o.py ? " on" : ""}" data-o="py" title="Пиньинь" aria-label="Пиньинь">pīn</button>
+          <button class="ftg${o.ru ? " on" : ""}" data-o="ru" title="Перевод" aria-label="Перевод">Рус</button></div></div>
+      <div class="film-v"><div id="fv"></div><div class="film-ov" id="fov" hidden></div></div>
+      <div class="film-cur" id="fcur"><p class="muted small center">Загружаю фразы…</p></div>
+      <div class="film-ctl">
+        <button class="fc-s" id="fspd" title="Скорость">1×</button>
+        <button class="fc" id="fprev" aria-label="Предыдущая фраза">${I_PREV}</button>
+        <button class="fc fc-play" id="fplay" aria-label="Пауза или воспроизведение">${I_PLAY}</button>
+        <button class="fc" id="fnext" aria-label="Следующая фраза">${I_NEXT}</button>
+        <button class="fc-s${o.loop ? " on" : ""}" id="floop" title="Повторять фразу">${icon("repeat")}</button></div>
+      <div class="film-list" id="flist"></div>
+      <p class="muted small" style="margin:14px 4px">Источник: ${esc(f.ch)}, YouTube. Перевод и пиньинь — lbchinese.</p>`;
+    const bk = document.getElementById("bk"); if (bk) bk.onclick = goBack;
+    const cls = () => { const c = document.getElementById("fcur"), l = document.getElementById("flist"); [c, l].forEach(el => { if (!el) return; el.classList.toggle("no-py", !o.py); el.classList.toggle("no-ru", !o.ru); el.classList.toggle("no-zh", !o.zh); }); };
+    document.querySelectorAll("[data-o]").forEach(b => b.onclick = () => { haptic(); o[b.dataset.o] = !o[b.dataset.o]; b.classList.toggle("on", o[b.dataset.o]); store.set("film_opt", o); cls(); });
+    // фразы
+    let L_ = [], lock = false, free = (FILMS && FILMS.free) || 120;
+    try {
+      const r = await apiPost("film", Object.assign(apiAuth(), { id: f.id }), 12000);
+      if (r.status === 200 && r.data && Array.isArray(r.data.l)) { L_ = r.data.l; lock = !!r.data.lock; free = r.data.free || free; }
+      else throw new Error(r.status);
+    } catch (e) { if (!document.getElementById("fcur")) return; document.getElementById("fcur").innerHTML = `<p class="center muted">Не получилось загрузить фразы. Проверь интернет и открой видео ещё раз.</p>`; return; }
+    if (!document.getElementById("fcur")) return;
+    const lineH = (ln, i, big) => `<div class="fl${big ? " big" : ""}" data-i="${i}">${big ? "" : `<span class="fl-t">${mmss(ln[0])}</span>`}
+      <div class="fl-zh">${ln[2].map(([w, p]) => HAN.test(w) ? `<span class="fw" data-w="${esc(w)}">${[...w].map((ch, k) => `<ruby>${esc(ch)}<rt>${esc((p || "").split(" ")[k] || "")}</rt></ruby>`).join("")}</span>` : `<span class="fp">${esc(w)}</span>`).join("")}</div>
+      <div class="fl-ru">${esc(ln[3])}</div></div>`;
+    const list = document.getElementById("flist");
+    list.innerHTML = L_.map((ln, i) => lineH(ln, i, false)).join("") + (lock ? `<div class="film-lockrow">${LOCK} Дальше — в Премиуме<button class="primary" id="flk" style="margin-top:10px">Открыть все фразы и видео целиком</button></div>` : "");
+    cls();
+    // список фраз прокручивается сам по себе, а видео и текущая фраза остаются на экране
+    const fit = () => { const l = document.getElementById("flist"); if (!l) return removeEventListener("resize", fit);
+      l.style.maxHeight = Math.max(220, innerHeight - (l.getBoundingClientRect().top + window.scrollY) - 16) + "px"; };
+    fit(); addEventListener("resize", fit);
+    const flk = document.getElementById("flk"); if (flk) flk.onclick = () => go(() => premiumScreen("film"));
+    let cur = -2, player = null, playing = false, timer = 0, rate = 1, loopI = -1;
+    const at = t => { let i = -1; for (let k = 0; k < L_.length; k++) { if (L_[k][0] <= t + 0.05) i = k; else break; } return i; };
+    const show = i => {
+      if (i === cur) return; cur = i;
+      const c = document.getElementById("fcur"); if (!c) return;
+      c.innerHTML = i >= 0 ? lineH(L_[i], i, true) : `<p class="muted small center">${L_.length ? "Нажми ▶, фразы появятся здесь" : "Фраз пока нет"}</p>`;
+      list.querySelectorAll(".fl.on").forEach(x => x.classList.remove("on"));
+      const li = list.querySelector(`.fl[data-i="${i}"]`);
+      if (li) { li.classList.add("on"); const top = li.offsetTop - list.offsetTop;
+        if (top < list.scrollTop || top + li.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTo({ top: Math.max(0, top - 8), behavior: "smooth" }); }
+    };
+    const pos = store.get("film_pos", {});
+    const seek = t => { if (player && player.seekTo) { player.seekTo(Math.max(0, t), true); show(at(t)); } };
+    const lockOv = () => { const ov = document.getElementById("fov"); if (!ov) return; ov.hidden = false;
+      ov.innerHTML = `<div>${LOCK}<b>Бесплатный фрагмент закончился</b><span>Смотри видео целиком с переводом каждой фразы в Чина Премиум</span><button class="primary" id="ovb">Оформить Премиум</button></div>`;
+      document.getElementById("ovb").onclick = () => go(() => premiumScreen("film")); };
+    const tick = () => {
+      if (!player || !player.getCurrentTime) return;
+      const t = player.getCurrentTime() || 0;
+      if (lock && t >= free) { player.pauseVideo(); player.seekTo(free - 0.5, true); lockOv(); return; }
+      if (o.loop && loopI >= 0 && L_[loopI] && t >= L_[loopI][1]) { player.seekTo(L_[loopI][0], true); return; }
+      const i = at(t);
+      show(i); if (!o.loop) loopI = i;
+      if (Math.floor(t) % 5 === 0) { pos[f.id] = Math.floor(t); store.set("film_pos", pos); }
+    };
+    cleanup = () => { clearInterval(timer); removeEventListener("resize", fit); try { player && player.destroy && player.destroy(); } catch (e) {} };
+    document.getElementById("fprev").onclick = () => { haptic(); const t = player ? player.getCurrentTime() : 0, i = at(t); const j = i > 0 && t - L_[i][0] < 1.2 ? i - 1 : Math.max(0, i); if (L_[j]) { loopI = j; seek(L_[j][0]); } };
+    document.getElementById("fnext").onclick = () => { haptic(); const t = player ? player.getCurrentTime() : 0, j = at(t) + 1; if (L_[j]) { loopI = j; if (lock && L_[j][0] >= free) return lockOv(); seek(L_[j][0]); } };
+    document.getElementById("fplay").onclick = () => { haptic(); if (!player) return; playing ? player.pauseVideo() : player.playVideo(); };
+    document.getElementById("floop").onclick = e => { haptic(); o.loop = !o.loop; loopI = cur; e.currentTarget.classList.toggle("on", o.loop); store.set("film_opt", o); toast(o.loop ? "Фраза будет повторяться" : "Повтор фразы выключен"); };
+    document.getElementById("fspd").onclick = e => { haptic(); rate = rate === 1 ? 0.75 : rate === 0.75 ? 0.5 : 1; if (player && player.setPlaybackRate) player.setPlaybackRate(rate); e.currentTarget.textContent = String(rate).replace(".", ",") + "×"; };
+    list.onclick = e => { const w = e.target.closest(".fw"); if (w) { haptic(); player && playing && player.pauseVideo(); return bkrsSheet(w.dataset.w); }
+      const l = e.target.closest(".fl"); if (l) { haptic(); const ln = L_[+l.dataset.i]; if (ln) { loopI = +l.dataset.i; seek(ln[0]); player && player.playVideo && player.playVideo(); } } };
+    document.getElementById("fcur").onclick = e => { const w = e.target.closest(".fw"); if (w) { haptic(); player && playing && player.pauseVideo(); bkrsSheet(w.dataset.w); } };
+    show(-1);
+    let YT_;
+    try { YT_ = await loadYT(); } catch (e) {
+      const v = document.getElementById("fv"); if (v) v.innerHTML = `<div class="film-err">YouTube не открылся. В России он работает с перебоями: попробуй включить VPN и открыть видео ещё раз. Фразы с переводом можно читать и без видео.</div>`; return; }
+    if (!document.getElementById("fv")) return;
+    const start = lock ? Math.min(pos[f.id] || 0, free - 5) : (pos[f.id] || 0);
+    player = new YT_.Player("fv", { videoId: f.yt, width: "100%", height: "100%",
+      playerVars: { playsinline: 1, rel: 0, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3, start: Math.max(0, Math.floor(start - 2)), hl: "ru" },
+      events: {
+        onReady: () => { timer = setInterval(tick, 200); },
+        onStateChange: ev => { playing = ev.data === 1; const b = document.getElementById("fplay"); if (b) b.innerHTML = playing ? I_PAUSE : I_PLAY; },
+        onError: () => { const v = document.querySelector(".film-v"); if (v) v.insertAdjacentHTML("beforeend", `<div class="film-err">Видео сейчас недоступно. Попробуй позже или включи VPN.</div>`); }
+      } });
+  }
+
   // ---------- экран «Чина Премиум» ----------
-  const PREM_LIST = [["club", "Чина без лимита", "и голосовые с разбором тонов"], ["scan", "Сканер текста", "фото → перевод, слова по тапу и грамматика"], ["exam", "Пробные HSK 3.0 и устный HSKK", "с таймером, оценкой и разбором"],
+  const PREM_LIST = [["club", "Чина без лимита", "и голосовые с разбором тонов"], ["scan", "Сканер текста", "фото → перевод, слова по тапу и грамматика"], ["film", "Кино на китайском", "мультфильмы и сериалы: перевод и пиньинь каждой фразы"], ["exam", "Пробные HSK 3.0 и устный HSKK", "с таймером, оценкой и разбором"],
     ["teacher", "Учитель и проверка сочинений", "без дневного лимита"], ["life", "Ролевые игры «Для жизни»", "Китай, работа, бизнес, хобби"],
     ["lesson", "Уроки вперёд и HSK 7–9", "сколько хочешь в день, итоговые тесты уровня"], ["review", "Работа над ошибками", "Чина возвращает то, что не получалось"]];
   function buyStars(k) {
@@ -2798,6 +2936,9 @@
     const head = $app.querySelector("#urgP") || $app.querySelector(".prem-head");
     if (head) head.insertAdjacentHTML("afterend", box);
     [["ykY", "y"], ["ykQ", "q"], ["ykM", "m"]].forEach(([id, c]) => { const b = document.getElementById(id); if (b) b.onclick = () => ykBuy(c, b); });
+    // пришли с сайта по кнопке «Оформить» (/go/?v=premium&plan=y) — сразу открываем оплату выбранного срока
+    const want = new URLSearchParams(location.search).get("plan");
+    if (want && !pwaPremium.done) { pwaPremium.done = 1; const b = document.getElementById({ y: "ykY", q: "ykQ", m: "ykM" }[want]); if (b) setTimeout(() => ykBuy(want, b), 400); }
     $app.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); openDoc(x.dataset.doc); });
   }
 
@@ -3023,5 +3164,5 @@
   }
   const VIEW = new URLSearchParams(location.search).get("v");
   if (PWA) document.documentElement.dataset.theme = "light";
-  Promise.all([load(), PWA ? pwaBoot() : fetchState()]).then(() => loadLevel(S.l)).then(() => { setTimeout(loadRest, 30); setTimeout(loadExamples, 1500); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : PWA && new URLSearchParams(location.search).has("chat") ? go(chatScreen) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
+  Promise.all([load(), PWA ? pwaBoot() : fetchState()]).then(() => loadLevel(S.l)).then(() => { setTimeout(loadRest, 30); setTimeout(loadExamples, 1500); }).then(() => VIEW === "hsk" ? go(can("exam") ? hskHub : () => premiumScreen("exam")) : VIEW === "hskk" ? go(can("hskk") ? hskkHub : () => premiumScreen("hskk")) : VIEW === "film" ? go(filmsScreen) : VIEW === "league" ? go(leagueScreen) : VIEW === "premium" ? go(() => premiumScreen()) : VIEW === "life" ? go(lifeTab, false) : VIEW === "scan" ? !can("scan") ? go(() => premiumScreen("scan")) : (+new URLSearchParams(location.search).get("sid") ? (go(scanScreen), openScan(+new URLSearchParams(location.search).get("sid"))) : go(scanScreen)) : PWA && new URLSearchParams(location.search).has("chat") ? go(chatScreen) : toHome()).catch(e => { $app.innerHTML = `<div class="paper">Не удалось загрузить программу<p class="muted small">${esc(e.message)}</p></div>`; });
 })();
