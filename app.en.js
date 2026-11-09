@@ -2799,6 +2799,9 @@
     const head = $app.querySelector("#urgP") || $app.querySelector(".prem-head");
     if (head) head.insertAdjacentHTML("afterend", box);
     [["ykY", "y"], ["ykQ", "q"], ["ykM", "m"]].forEach(([id, c]) => { const b = document.getElementById(id); if (b) b.onclick = () => ykBuy(c, b); });
+    // пришли с сайта по кнопке «Оформить» (/go/?v=premium&plan=y) — сразу открываем оплату выбранного срока
+    const want = new URLSearchParams(location.search).get("plan");
+    if (want && !pwaPremium.done) { pwaPremium.done = 1; const b = document.getElementById({ y: "ykY", q: "ykQ", m: "ykM" }[want]); if (b) setTimeout(() => ykBuy(want, b), 400); }
     $app.querySelectorAll("[data-doc]").forEach(x => x.onclick = e => { e.preventDefault(); openDoc(x.dataset.doc); });
   }
 
