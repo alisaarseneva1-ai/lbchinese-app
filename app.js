@@ -1155,7 +1155,7 @@
           <button class="ftg${o.zh ? " on" : ""}" data-o="zh" title="Иероглифы" aria-label="Иероглифы">汉</button>
           <button class="ftg${o.py ? " on" : ""}" data-o="py" title="Пиньинь" aria-label="Пиньинь">pīn</button>
           <button class="ftg${o.ru ? " on" : ""}" data-o="ru" title="Перевод" aria-label="Перевод">Рус</button></div></div>
-      <div class="film-v"><div id="fv"></div><div class="film-ov" id="fov" hidden></div></div>
+      <div class="film-v" style="background-image:url(https://i.ytimg.com/vi/${esc(f.yt)}/hqdefault.jpg)"><div id="fv"></div><div class="film-ov" id="fov" hidden></div></div>
       <div class="film-cur" id="fcur"><p class="muted small center">Загружаю фразы…</p></div>
       <div class="film-ctl">
         <button class="fc-s" id="fspd" title="Скорость">1×</button>
@@ -1169,12 +1169,12 @@
     const cls = () => { const c = document.getElementById("fcur"), l = document.getElementById("flist"); [c, l].forEach(el => { if (!el) return; el.classList.toggle("no-py", !o.py); el.classList.toggle("no-ru", !o.ru); el.classList.toggle("no-zh", !o.zh); }); };
     document.querySelectorAll("[data-o]").forEach(b => b.onclick = () => { haptic(); o[b.dataset.o] = !o[b.dataset.o]; b.classList.toggle("on", o[b.dataset.o]); store.set("film_opt", o); cls(); });
     // фразы
-    let L_ = [], lock = false, free = (FILMS && FILMS.free) || 120;
+    let L_ = [], lock = false, failed = false, free = (FILMS && FILMS.free) || 120;
     try {
       const r = await apiPost("film", Object.assign(apiAuth(), { id: f.id }), 12000);
       if (r.status === 200 && r.data && Array.isArray(r.data.l)) { L_ = r.data.l; lock = !!r.data.lock; free = r.data.free || free; }
       else throw new Error(r.status);
-    } catch (e) { if (!document.getElementById("fcur")) return; document.getElementById("fcur").innerHTML = `<p class="center muted">Не получилось загрузить фразы. Проверь интернет и открой видео ещё раз.</p>`; return; }
+    } catch (e) { if (!document.getElementById("fcur")) return; document.getElementById("fcur").innerHTML = `<p class="center muted">Не получилось загрузить фразы. Видео можно смотреть, а фразы появятся, если открыть его ещё раз.</p>`; L_ = []; failed = true; lock = !isPrem(); }
     if (!document.getElementById("fcur")) return;
     const lineH = (ln, i, big) => `<div class="fl${big ? " big" : ""}" data-i="${i}">${big ? "" : `<span class="fl-t">${mmss(ln[0])}</span>`}
       <div class="fl-zh">${ln[2].map(([w, p]) => HAN.test(w) ? `<span class="fw" data-w="${esc(w)}">${[...w].map((ch, k) => `<ruby>${esc(ch)}<rt>${esc((p || "").split(" ")[k] || "")}</rt></ruby>`).join("")}</span>` : `<span class="fp">${esc(w)}</span>`).join("")}</div>
@@ -1192,7 +1192,7 @@
     const show = i => {
       if (i === cur) return; cur = i;
       const c = document.getElementById("fcur"); if (!c) return;
-      c.innerHTML = i >= 0 ? lineH(L_[i], i, true) : `<p class="muted small center">${L_.length ? "Нажми ▶, фразы появятся здесь" : "Фраз пока нет"}</p>`;
+      if (failed && i < 0) return; c.innerHTML = i >= 0 ? lineH(L_[i], i, true) : `<p class="muted small center">${L_.length ? "Нажми ▶, фразы появятся здесь" : "Фраз пока нет"}</p>`;
       list.querySelectorAll(".fl.on").forEach(x => x.classList.remove("on"));
       const li = list.querySelector(`.fl[data-i="${i}"]`);
       if (li) { li.classList.add("on"); const top = li.offsetTop - list.offsetTop;
@@ -1228,7 +1228,7 @@
     if (!document.getElementById("fv")) return;
     const start = lock ? Math.min(pos[f.id] || 0, free - 5) : (pos[f.id] || 0);
     player = new YT_.Player("fv", { videoId: f.yt, width: "100%", height: "100%",
-      playerVars: { playsinline: 1, rel: 0, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3, start: Math.max(0, Math.floor(start - 2)), hl: "ru" },
+      playerVars: { playsinline: 1, rel: 0, origin: location.origin, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3, start: Math.max(0, Math.floor(start - 2)), hl: "ru" },
       events: {
         onReady: () => { timer = setInterval(tick, 200); },
         onStateChange: ev => { playing = ev.data === 1; const b = document.getElementById("fplay"); if (b) b.innerHTML = playing ? I_PAUSE : I_PLAY; },
