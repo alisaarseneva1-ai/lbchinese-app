@@ -1678,24 +1678,29 @@
     let el = document.getElementById("parse");
     if (!el) { el = document.createElement("div"); el.id = "parse"; box.before(el); }
     const han = (raw.match(/[㐀-鿿]/g) || []).length;
+    const ru = !han && /[а-яёА-ЯЁ]{2}/.test(raw) && raw.trim().length >= 3;
     // одно слово ищем как обычно; разбираем, если введено предложение, фраза или несколько слов
-    if (han < 2 || exact || (han <= 4 && !/[\s，。！？、,.!?；;：:]/.test(raw) && P.words.has(raw))) { el.innerHTML = ""; return; }
+    if (!ru && (han < 2 || exact || (han <= 4 && !/[\s，。！？、,.!?；;：:]/.test(raw) && P.words.has(raw)))) { el.innerHTML = ""; return; }
     const my = ++parseSeq;
-    el.innerHTML = `<p class="muted small" style="padding:6px 2px">${L("Разбираю по словам…", "Splitting into words…")}</p>`;
+    el.innerHTML = `<p class="muted small" style="padding:6px 2px">${ru ? L("Перевожу на китайский…", "Translating to Chinese…") : L("Разбираю по словам…", "Splitting into words…")}</p>`;
     parseT = setTimeout(async () => {
       let r = null;
       try { r = await apiPost("dict", { s: raw }, 9000); } catch (e) {}
       if (my !== parseSeq || !document.getElementById("parse")) return;
       const toks = r && r.status === 200 && r.data && Array.isArray(r.data.t) ? r.data.t : [];
+      const zh = r && r.data && typeof r.data.zh === "string" ? r.data.zh : "";
       if (!toks.some(t => t[3] >= 0)) { el.innerHTML = ""; return; }
       const words = toks.filter(t => t[3] >= 0);
       const whole = r && r.data && typeof r.data.tr === "string" ? r.data.tr : "";
-      el.innerHTML = (whole ? `<div class="parse whole"><div class="parse-h"><b>${L("Перевод целиком", "Full translation")}</b></div><div class="whole-ru">${esc(whole)}</div></div>` : "")
+      const pyAll = toks.map(t => t[1]).filter(Boolean).join(" ");
+      el.innerHTML = (zh ? `<div class="parse whole"><div class="parse-h"><b>${L("Перевод на китайский", "Chinese translation")}</b><button type="button" class="parse-say" id="zSay">${icon("sound")}${L("Послушать", "Listen")}</button></div><div class="zh" style="font-size:26px;line-height:1.4">${esc(zh)}</div>${pyAll ? pyH(pyAll, "py", true) : ""}</div>` : "")
+        + (whole ? `<div class="parse whole"><div class="parse-h"><b>${L("Перевод целиком", "Full translation")}</b></div><div class="whole-ru">${esc(whole)}</div></div>` : "")
         + `<div class="parse"><div class="parse-h"><b>${L("Разбор по словам", "Word by word")}</b><button type="button" class="parse-say" id="pSay">${icon("sound")}${L("Послушать", "Listen")}</button></div>
         <div class="parse-line zh">${toks.map((t, i) => t[3] < 0 ? `<span class="pp">${esc(t[0])}</span>` : `<button type="button" class="pt" data-pi="${i}"><small>${esc(t[1])}</small>${esc(t[0])}</button>`).join("")}</div>
         ${words.map(t => `<button type="button" class="entry pw" data-pi="${toks.indexOf(t)}"><span class="h zh">${esc(t[0])}</span><span>${pyH(t[1], "p", true)}<div class="m">${esc(t[2])}</div></span><span class="lv">${t[3] ? hsk(t[3]) : ""}</span></button>`).join("")}
         <p class="muted small" style="margin:8px 2px 0">${L("Слова разделены по словарю. Нажми на слово — откроется карточка с примерами и озвучкой.", "Words are split using the dictionary. Tap a word for its card with examples and audio.")}</p></div>`;
-      document.getElementById("pSay").onclick = () => { haptic(); speak(raw.replace(/\s+/g, "").slice(0, 60)); };
+      const zs = document.getElementById("zSay"); if (zs) zs.onclick = () => { haptic(); speak(zh.slice(0, 60)); };
+      document.getElementById("pSay").onclick = () => { haptic(); speak((zh || raw).replace(/\s+/g, "").slice(0, 60)); };
       el.querySelectorAll("[data-pi]").forEach(b => b.onclick = () => { haptic(); const t = toks[+b.dataset.pi]; const w = word(t[0]); w ? wordSheet(w) : bkrsSheet(t[0]); });
     }, 380);
   }
