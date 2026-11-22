@@ -1689,7 +1689,9 @@
       const toks = r && r.status === 200 && r.data && Array.isArray(r.data.t) ? r.data.t : [];
       if (!toks.some(t => t[3] >= 0)) { el.innerHTML = ""; return; }
       const words = toks.filter(t => t[3] >= 0);
-      el.innerHTML = `<div class="parse"><div class="parse-h"><b>${L("Разбор по словам", "Word by word")}</b><button type="button" class="parse-say" id="pSay">${icon("sound")}${L("Послушать", "Listen")}</button></div>
+      const whole = r && r.data && typeof r.data.tr === "string" ? r.data.tr : "";
+      el.innerHTML = (whole ? `<div class="parse whole"><div class="parse-h"><b>${L("Перевод целиком", "Full translation")}</b></div><div class="whole-ru">${esc(whole)}</div></div>` : "")
+        + `<div class="parse"><div class="parse-h"><b>${L("Разбор по словам", "Word by word")}</b><button type="button" class="parse-say" id="pSay">${icon("sound")}${L("Послушать", "Listen")}</button></div>
         <div class="parse-line zh">${toks.map((t, i) => t[3] < 0 ? `<span class="pp">${esc(t[0])}</span>` : `<button type="button" class="pt" data-pi="${i}"><small>${esc(t[1])}</small>${esc(t[0])}</button>`).join("")}</div>
         ${words.map(t => `<button type="button" class="entry pw" data-pi="${toks.indexOf(t)}"><span class="h zh">${esc(t[0])}</span><span>${pyH(t[1], "p", true)}<div class="m">${esc(t[2])}</div></span><span class="lv">${t[3] ? hsk(t[3]) : ""}</span></button>`).join("")}
         <p class="muted small" style="margin:8px 2px 0">${L("Слова разделены по словарю. Нажми на слово — откроется карточка с примерами и озвучкой.", "Words are split using the dictionary. Tap a word for its card with examples and audio.")}</p></div>`;
@@ -1737,11 +1739,37 @@
       ${d.e.map(e => `<div class="bk-ent">${e.py ? pyH(e.py, "py", true) : ""}<div class="bk-html">${e.html}</div></div>`).join("")}
       <div class="row" style="gap:8px;margin-top:12px"><button class="sound" id="say" style="flex:1">${icon("sound")}${L("Послушать", "Listen")}</button><button class="primary" id="learnB" style="flex:1.4;margin:0">${L("Учить: в повторение", "Learn: add to review")}</button></div>
       ${d.x.length ? `<div class="label" style="margin:16px 0 6px">${L("Примеры", "Examples")}</div>${d.x.map(([zh, py, ru]) => `<div class="gex"><button class="sound-mini" data-say="${esc(zh)}">${icon("sound")}</button><div><div class="zh">${esc(zh)}</div>${py ? pyH(py) : ""}<div class="small muted">${esc(ru)}</div></div></div>`).join("")}` : ""}
+      <div class="parts-box">${partsHtml(h)}</div>
       ${BK_SRC}`;
+    fillParts(bg, h);
     sheet.querySelector("#say").onclick = e => { e.stopPropagation(); speak(h); };
     sheet.querySelectorAll("[data-say]").forEach(b => b.onclick = e => { e.stopPropagation(); speak(b.dataset.say); });
     sheet.querySelector("#learnB").onclick = e => { e.stopPropagation(); learnWord(h, first.py || (local && local.p) || "", shortM); haptic("success"); };
     bindLinks(sheet);
+  }
+  // ---------- разбор иероглифа по ключам ----------
+  let PARTS = null, partsP = null;
+  function loadParts() {
+    if (!partsP) partsP = fetch("hanzi_parts.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(d => { PARTS = d; return d; }).catch(() => null);
+    return partsP;
+  }
+  function partsHtml(h) {
+    if (!PARTS || !PARTS.c) return "";
+    const seen = {}, chars = [...String(h || "")].filter(c => /[\u3400-\u9fff]/.test(c) && !seen[c] && (seen[c] = 1));
+    const rows = chars.map(c => {
+      const e = PARTS.c[c]; if (!e) return "";
+      const rad = e.r || "", ru = PARTS.ru[rad] || "";
+      const other = [...(e.p || "")].filter(x => x !== rad);
+      return '<div class="prt"><span class="zh prt-c">' + esc(c) + '</span><span class="grow">'
+        + (rad ? '<b>ключ ' + esc(rad) + "</b>" + (ru ? " — " + esc(ru) : "") : "")
+        + (other.length ? '<div class="small muted">части: ' + other.map(x => esc(x) + (PARTS.ru[x] ? " (" + esc(PARTS.ru[x]) + ")" : "")).join(" + ") + "</div>" : "")
+        + (e.n ? '<div class="small muted">черт: ' + e.n + "</div>" : "")
+        + "</span></div>";
+    }).filter(Boolean).join("");
+    return rows ? '<div class="note parts"><b>' + L("Разбор по ключам", "Character parts") + "</b>" + rows + "</div>" : "";
+  }
+  function fillParts(bg, h) {
+    loadParts().then(() => { const box = bg && bg.querySelector(".parts-box"); if (box) box.innerHTML = partsHtml(h); });
   }
   function wordSheet(w) {
     const l = lesson(w.lv, w.day);
@@ -1749,8 +1777,10 @@
     bg.innerHTML = `<div class="sheet center"><div class="grab"></div><div class="big zh">${esc(w.h)}</div>${pyH(w.p, "py", true)}
       <div class="ru">${esc(w.m)}</div><button class="sound" id="say">${icon("sound")}Послушать</button>
       ${w.hint || exsOf(w).length ? `<div class="note">${esc(w.hint)}${exsOf(w).slice(0, 3).map(e => `<div style="margin-top:8px"><span class="zh">${esc(e[0])}</span>${e[1] ? pyH(e[1]) : "<br>"}<span class="small muted">${esc(e[2])}</span></div>`).join("")}</div>` : ""}
+      <div class="parts-box">${partsHtml(w.h)}</div>
       <p class="muted small" style="margin-top:16px">${hsk(w.lv)}${l ? ` · неделя ${l.week}, день ${l.day}` : ""}</p></div>`;
     bg.querySelector("#say").onclick = e => { e.stopPropagation(); speak(w.h); };
+    fillParts(bg, w.h);
     bg.addEventListener("click", e => { if (e.target === bg) bg.remove(); }); document.body.appendChild(bg);
   }
 
