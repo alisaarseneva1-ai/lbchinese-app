@@ -1127,7 +1127,7 @@
     const card = f => `<button class="film-c" data-f="${esc(f.id)}"><span class="film-th"><img src="https://i.ytimg.com/vi/${esc(f.yt)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="film-len">${mmss(f.sec)}</span>${seen[f.id] ? `<span class="film-bar" style="width:${Math.min(100, seen[f.id] / f.sec * 100)}%"></span>` : ""}</span>
       <span class="film-t"><b class="zh">${esc(f.zh)}</b><span>${esc(f.ru)}</span><small>${esc(f.lv)} · ${esc(f.ch)}</small></span></button>`;
     const groups = [["cartoon", "Мультфильмы"], ["series", "Сериалы"]];
-    document.getElementById("fl").innerHTML = (can("film") ? "" : `<div class="film-note">${LOCK} Без Премиума — первые ${Math.round(d.free / 60)} минуты каждого видео. <button class="linkb" id="fprem">Открыть всё</button></div>`) +
+    document.getElementById("fl").innerHTML = (can("film") ? "" : `<div class="film-note">${LOCK} Без Премиума — первые ${Math.round(d.free / 60)} минуты с фразами в каждом видео. <button class="linkb" id="fprem">Открыть всё</button></div>`) +
       groups.map(([k, t]) => { const xs = d.items.filter(f => f.kind === k); return xs.length ? `<div class="label" style="margin:18px 2px 8px">${t}</div><div class="film-grid">${xs.map(card).join("")}</div>` : ""; }).join("") +
       `<p class="muted small" style="margin:18px 4px 0">Видео показываются с YouTube. Если не открываются — в России YouTube работает с перебоями, попробуй включить VPN.</p>`;
     const fp = document.getElementById("fprem"); if (fp) fp.onclick = () => go(() => premiumScreen("film"));
@@ -1199,6 +1199,9 @@
         if (top < list.scrollTop || top + li.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTo({ top: Math.max(0, top - 8), behavior: "smooth" }); }
     };
     const pos = store.get("film_pos", {});
+    // в сериалах первые минуты — заставка без речи, поэтому бесплатный отрывок считаем от первой фразы
+    const freeEnd = () => (L_.length ? L_[0][0] + free : free);
+    const firstAt = () => (L_.length ? Math.max(0, L_[0][0] - 2) : 0);
     const seek = t => { if (player && player.seekTo) { player.seekTo(Math.max(0, t), true); show(at(t)); } };
     const lockOv = () => { const ov = document.getElementById("fov"); if (!ov) return; ov.hidden = false;
       ov.innerHTML = `<div>${LOCK}<b>Бесплатный фрагмент закончился</b><span>Смотри видео целиком с переводом каждой фразы в Чина Премиум</span><button class="primary" id="ovb">Оформить Премиум</button></div>`;
@@ -1206,7 +1209,7 @@
     const tick = () => {
       if (!player || !player.getCurrentTime) return;
       const t = player.getCurrentTime() || 0;
-      if (lock && t >= free) { player.pauseVideo(); player.seekTo(free - 0.5, true); lockOv(); return; }
+      if (lock && t >= freeEnd()) { player.pauseVideo(); player.seekTo(freeEnd() - 0.5, true); lockOv(); return; }
       if (o.loop && loopI >= 0 && L_[loopI] && t >= L_[loopI][1]) { player.seekTo(L_[loopI][0], true); return; }
       const i = at(t);
       show(i); if (!o.loop) loopI = i;
@@ -1214,7 +1217,7 @@
     };
     cleanup = () => { clearInterval(timer); removeEventListener("resize", fit); try { player && player.destroy && player.destroy(); } catch (e) {} };
     document.getElementById("fprev").onclick = () => { haptic(); const t = player ? player.getCurrentTime() : 0, i = at(t); const j = i > 0 && t - L_[i][0] < 1.2 ? i - 1 : Math.max(0, i); if (L_[j]) { loopI = j; seek(L_[j][0]); } };
-    document.getElementById("fnext").onclick = () => { haptic(); const t = player ? player.getCurrentTime() : 0, j = at(t) + 1; if (L_[j]) { loopI = j; if (lock && L_[j][0] >= free) return lockOv(); seek(L_[j][0]); } };
+    document.getElementById("fnext").onclick = () => { haptic(); const t = player ? player.getCurrentTime() : 0, j = at(t) + 1; if (L_[j]) { loopI = j; if (lock && L_[j][0] >= freeEnd()) return lockOv(); seek(L_[j][0]); } };
     document.getElementById("fplay").onclick = () => { haptic(); if (!player) return; playing ? player.pauseVideo() : player.playVideo(); };
     document.getElementById("floop").onclick = e => { haptic(); o.loop = !o.loop; loopI = cur; e.currentTarget.classList.toggle("on", o.loop); store.set("film_opt", o); toast(o.loop ? "Фраза будет повторяться" : "Повтор фразы выключен"); };
     document.getElementById("fspd").onclick = e => { haptic(); rate = rate === 1 ? 0.75 : rate === 0.75 ? 0.5 : 1; if (player && player.setPlaybackRate) player.setPlaybackRate(rate); e.currentTarget.textContent = String(rate).replace(".", ",") + "×"; };
@@ -1226,7 +1229,7 @@
     try { YT_ = await loadYT(); } catch (e) {
       const v = document.getElementById("fv"); if (v) v.innerHTML = `<div class="film-err">YouTube не открылся. В России он работает с перебоями: попробуй включить VPN и открыть видео ещё раз. Фразы с переводом можно читать и без видео.</div>`; return; }
     if (!document.getElementById("fv")) return;
-    const start = lock ? Math.min(pos[f.id] || 0, free - 5) : (pos[f.id] || 0);
+    const start = lock ? Math.min(pos[f.id] || firstAt(), freeEnd() - 5) : (pos[f.id] || firstAt());
     player = new YT_.Player("fv", { videoId: f.yt, width: "100%", height: "100%",
       playerVars: { playsinline: 1, rel: 0, origin: location.origin, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3, start: Math.max(0, Math.floor(start - 2)), hl: "ru" },
       events: {
