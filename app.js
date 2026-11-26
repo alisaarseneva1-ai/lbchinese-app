@@ -306,6 +306,9 @@
 
   // ---------- утилиты ----------
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // пропуск в задании: заметная рамка вместо тонких «＿＿»; несколько пропусков нумеруем
+  const gapHtml = s => { const n = (String(s).match(/[＿_]{2,}|（\s*）|\(\s*\)/g) || []).length; let k = 0;
+    return esc(s).replace(/[＿_]{2,}|（\s*）|\(\s*\)/g, () => `<span class="gapbox">${n > 1 ? ++k : "?"}</span>`).replace(/\n/g, "<br>"); };
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const plural = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; };
   const haptic = t => { try { if (!tg || !tg.HapticFeedback) return; t ? tg.HapticFeedback.notificationOccurred(t) : tg.HapticFeedback.selectionChanged(); } catch (e) {} };
@@ -1469,7 +1472,7 @@
           ${q.exam && q.ru ? `<div class="small muted" style="margin-top:4px">${esc(q.ru)}</div>` : ""}
           ${q.passage ? `<div class="passage zh" style="text-align:left">${esc(q.passage).replace(/\n/g, "<br>")}</div>` : ""}
           ${noAud ? `<div class="passage zh" style="text-align:left">${esc(q.script).replace(/\n/g, "<br>")}</div>` : ""}
-          ${q.zh ? `<div class="${q.zh.length > 6 ? "q-sent" : "q-hz"} zh">${esc(q.zh).replace(/\n/g, "<br>")}</div>` : ""}
+          ${q.zh ? `<div class="${q.zh.length > 6 ? "q-sent" : "q-hz"} zh">${gapHtml(q.zh)}</div>` : ""}
           ${q.py ? pyH(q.py, "py") : ""}
           ${q.ru && !q.exam ? `<div class="${q.zh ? "small muted" : "q-ru"}" style="margin-top:8px">${esc(q.ru)}</div>` : ""}
           ${(q.say || q.lines || q.audio) && !noAud ? `<button class="sound" id="play">${icon("sound")}Послушать${q.lines || q.audio ? " ещё раз" : ""}</button>` : ""}${tip}</div>`;
@@ -1482,6 +1485,11 @@
           if (q.sec && !q.retry) { const t = secs[q.sec] = secs[q.sec] || [0, 0]; t[0] += ok ? 1 : 0; t[1]++; }
           let again = "";
           if (!ok && coach && !q.retry) { const t = similar(q); if (t) { t.retry = 1; t.eyebrow = "Ещё раз на ту же тему · " + t.eyebrow; steps.splice(Math.min(i + 3, steps.length), 0, { type: "q", q: t }); total++; again = `<div class="note">Через пару заданий будет похожее — закрепим</div>`; } }
+          // после ответа вписываем правильное слово в пропуск
+          if ((q.kind === "gap" || q.kind === "grammar") && q.opts && q.correct >= 0) {
+            const ans = String(q.opts[q.correct]).split(/\s*[…]+\s*|\s*\.\.\.\s*/);
+            document.querySelectorAll(".q-sent .gapbox, .q-hz .gapbox").forEach((g, k) => { const t = ans.length > 1 ? ans[k] : ans[0]; if (t) { g.textContent = t; g.classList.add(ok ? "ok" : "fix"); } });
+          }
           const why = ok ? "" : whyText(q, chosen);
           const wline = q.w ? ` <span class="zh">${esc(q.w.h)}</span> · ${pyH(q.w.p, "py-in", false, "span")} · ${esc(q.w.m)}` : "";
           // Чина реагирует: радуется, сочувствует, на серии 3/5/8+ — «вау» и «люблю»
